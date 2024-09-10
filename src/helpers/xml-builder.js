@@ -1111,12 +1111,29 @@ const buildTableCellBorders = (tableCellBorder) => {
   return tableCellBordersFragment;
 };
 
-const buildTableCellWidth = (tableCellWidth) =>
-  fragment({ namespaceAlias: { w: namespaces.w } })
+const buildTableCellWidth = (tableCellWidth) => {
+  let width;
+  let type;
+
+  if (typeof tableCellWidth === 'string') {
+    if (tableCellWidth.endsWith('%')) {
+      width = Math.round(parseFloat(tableCellWidth) * 50); // Convert to fiftieths of a percent
+      type = 'pct';
+    } else {
+      width = fixupColumnWidth(tableCellWidth);
+      type = 'dxa';
+    }
+  } else {
+    width = tableCellWidth;
+    type = 'dxa';
+  }
+
+  return fragment({ namespaceAlias: { w: namespaces.w } })
     .ele('@w', 'tcW')
-    .att('@w', 'w', fixupColumnWidth(tableCellWidth))
-    .att('@w', 'type', 'dxa')
+    .att('@w', 'w', width.toString())
+    .att('@w', 'type', type)
     .up();
+};
 
 const buildTableCellProperties = (attributes) => {
   const tableCellPropertiesFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele(
@@ -1314,6 +1331,13 @@ const buildTableCell = async (vNode, attributes, rowSpanMap, columnIndex, docxDo
     }
   }
   const tableCellPropertiesFragment = buildTableCellProperties(modifiedAttributes);
+
+  // Handle width explicitly
+  if (modifiedAttributes.width) {
+    const widthFragment = buildTableCellWidth(modifiedAttributes.width);
+    tableCellPropertiesFragment.import(widthFragment);
+  }
+
   tableCellFragment.import(tableCellPropertiesFragment);
   if (vNodeHasChildren(vNode)) {
     for (let index = 0; index < vNode.children.length; index++) {
@@ -1536,25 +1560,35 @@ const buildTableGrid = (vNode, attributes) => {
   return tableGridFragment;
 };
 
-const buildTableGridFromTableRow = (vNode, attributes) => {
+const buildTableGridFromTableRow = (vNode) => {
   const tableGridFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tblGrid');
   if (vNodeHasChildren(vNode)) {
-    const numberOfGridColumns = vNode.children.reduce((accumulator, childVNode) => {
-      const colSpan =
-        childVNode.properties.colSpan ||
-        (childVNode.properties.style && childVNode.properties.style['column-span']);
+    const columnWidths = [];
+    vNode.children.forEach((childVNode) => {
+      if (
+        childVNode.properties &&
+        childVNode.properties.style &&
+        childVNode.properties.style.width
+      ) {
+        const { width } = childVNode.properties.style;
+        if (width.endsWith('%')) {
+          const percentage = parseFloat(width);
+          columnWidths.push(Math.round(percentage * 50)); // Convert to fiftieths of a percent
+        } else {
+          columnWidths.push(fixupColumnWidth(width));
+        }
+      }
+    });
 
-      return accumulator + (colSpan ? parseInt(colSpan) : 1);
-    }, 0);
-    const gridWidth = attributes.maximumWidth / numberOfGridColumns;
-
-    for (let index = 0; index < numberOfGridColumns; index++) {
-      const tableGridColFragment = buildTableGridCol(gridWidth);
+    columnWidths.forEach((width) => {
+      const tableGridColFragment = fragment({ namespaceAlias: { w: namespaces.w } })
+        .ele('@w', 'gridCol')
+        .att('@w', 'w', width.toString())
+        .up();
       tableGridFragment.import(tableGridColFragment);
-    }
+    });
   }
   tableGridFragment.up();
-
   return tableGridFragment;
 };
 
