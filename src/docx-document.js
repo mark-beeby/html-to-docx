@@ -1,6 +1,9 @@
 import { create, fragment } from 'xmlbuilder2';
 import { nanoid } from 'nanoid';
-
+import https from 'https';
+import http from 'http';
+import { URL } from 'url';
+import sharp from 'sharp';
 import {
   generateCoreXML,
   generateStylesXML,
@@ -204,31 +207,51 @@ class DocxDocument {
       { encoding: 'UTF-8', standalone: true },
       generateDocumentTemplate(this.width, this.height, this.orientation, this.margins)
     );
+
+    documentXML.root().att('xmlns:w', namespaces.w);
+    documentXML.root().att('xmlns:r', namespaces.r);
+    documentXML.root().att('xmlns:wp', namespaces.wp);
+    documentXML.root().att('xmlns:a', namespaces.a);
+    documentXML.root().att('xmlns:pic', namespaces.pic);
+    documentXML.root().att('xmlns:ve', namespaces.ve);
+    documentXML.root().att('xmlns:o', namespaces.o);
+    documentXML.root().att('xmlns:v', namespaces.v);
+    documentXML.root().att('xmlns:w10', namespaces.w10);
     documentXML.root().first().import(this.documentXML);
 
     generateSectionReferenceXML(documentXML, 'header', this.headerObjects, this.header);
     generateSectionReferenceXML(documentXML, 'footer', this.footerObjects, this.footer);
 
     if ((this.header || this.footer) && this.skipFirstHeaderFooter) {
-      documentXML
-        .root()
-        .first()
-        .first()
-        .import(fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'titlePg'));
+      documentXML.root().first().ele('@w', 'titlePg').up();
     }
+
     if (this.lineNumber) {
       const { countBy, start, restart } = this.lineNumber;
       documentXML
         .root()
         .first()
-        .first()
-        .import(
-          fragment({ namespaceAlias: { w: namespaces.w } })
-            .ele('@w', 'lnNumType')
-            .att('@w', 'countBy', countBy)
-            .att('@w', 'start', start)
-            .att('@w', 'restart', restart)
-        );
+        .ele('@w', 'lnNumType')
+        .att('@w', 'countBy', countBy)
+        .att('@w', 'start', start)
+        .att('@w', 'restart', restart)
+        .up();
+    }
+
+    // Modify section properties for responsive header
+    if (this.sectionProperties) {
+      const body = documentXML.root().first();
+
+      // Iterate through child elements to find and modify existing sectPr
+      body.each((child) => {
+        if (child.node.nodeName === 'w:sectPr') {
+          // Remove the existing sectPr
+          child.remove();
+        }
+      });
+
+      // Append the new sectPr at the end of the body
+      body.import(this.sectionProperties.root());
     }
 
     return documentXML.toString({ prettyPrint: true });
@@ -514,8 +537,241 @@ class DocxDocument {
     return lastRelsId;
   }
 
-  generateHeaderXML(vTree) {
-    return this.generateSectionXML(vTree, 'header');
+  adjustSectionProperties() {
+    // const headerHeight = Math.min(Math.max(imageHeightTwips || 0, 0), 9000);
+
+    this.sectionProperties = create({ encoding: 'UTF-8', standalone: true }).ele('w:sectPr', {
+      'xmlns:w': namespaces.w,
+      'xmlns:r': namespaces.r,
+    });
+
+    if (this.width && this.height) {
+      this.sectionProperties
+        .ele('w:pgSz')
+        .att('w:w', this.width.toString())
+        .att('w:h', this.height.toString())
+        .up();
+    }
+    if (this.pageNumberStart) {
+      this.sectionProperties
+        .ele('w:pgNumType')
+        .att('w:start', this.pageNumberStart.toString())
+        .up();
+    }
+
+    if (this.headerObjects && this.headerObjects[0] && this.headerObjects[0].relationshipId) {
+      this.sectionProperties
+        .ele('w:headerReference')
+        .att('w:type', 'default')
+        .att('r:id', `rId${this.headerObjects[0].relationshipId}`)
+        .up();
+    }
+
+    return this.sectionProperties;
+  }
+
+  async generateHeaderXML(vTree, headerImageUrl) {
+    const headerId = this.lastHeaderId + 1;
+    this.lastHeaderId = headerId;
+
+    // Convert page width from twips to EMUs (1 twip = 635 EMUs)
+    const pageWidthEMU = this.width * 635;
+
+    const headerXML = create({
+      encoding: 'UTF-8',
+      standalone: true,
+      namespaceAlias: {
+        w: namespaces.w,
+        r: namespaces.r,
+        wp: namespaces.wp,
+        a: namespaces.a,
+        pic: namespaces.pic,
+        ve: namespaces.ve,
+        o: namespaces.o,
+        v: namespaces.v,
+        w10: namespaces.w10,
+      },
+    }).ele('@w', 'hdr');
+
+    if (headerImageUrl) {
+      try {
+        // Fetch the image and get its dimensions
+        const { base64String, width, height } = await new Promise((resolve, reject) => {
+          const url = new URL(headerImageUrl);
+          const protocol = url.protocol === 'https:' ? https : http;
+
+          protocol
+            .get(url, (response) => {
+              if (response.statusCode !== 200) {
+                reject(new Error(`Failed to fetch image: ${response.statusCode}`));
+                return;
+              }
+
+              const chunks = [];
+              response.on('data', (chunk) => chunks.push(chunk));
+              response.on('end', () => {
+                const buffer = Buffer.concat(chunks);
+                const base64 = buffer.toString('base64');
+                const mimeType = response.headers['content-type'];
+
+                // Get image dimensions
+                sharp(buffer)
+                  .metadata()
+                  .then((metadata) => {
+                    resolve({
+                      base64String: `data:${mimeType};base64,${base64}`,
+                      width: metadata.width,
+                      height: metadata.height,
+                    });
+                  })
+                  .catch((err) => reject(err));
+              });
+            })
+            .on('error', reject);
+        });
+
+        // Calculate the height while maintaining aspect ratio
+        const aspectRatio = width / height;
+        const imageHeightEMU = Math.round(pageWidthEMU / aspectRatio);
+
+        // Store the calculated height in twips for later use
+        this.headerHeight = Math.round(imageHeightEMU / 635);
+
+        const imageFile = this.createMediaFile(base64String);
+        const imageRelationshipId = this.createDocumentRelationships(
+          `header${headerId}`,
+          imageType,
+          `media/${imageFile.fileNameWithExtension}`,
+          'Internal'
+        );
+
+        // Add the image file to the zip
+        this.zip
+          .folder('word/media')
+          .file(imageFile.fileNameWithExtension, imageFile.fileContent, { base64: true });
+
+        headerXML
+          .ele('@w', 'p')
+          .ele('@w', 'pPr')
+          .ele('@w', 'pStyle')
+          .att('@w', 'val', 'Header')
+          .up()
+          .up()
+          .ele('@w', 'r')
+          .ele('@w', 'drawing')
+          .ele('@wp', 'anchor')
+          .att('behindDoc', '1')
+          .att('distT', '0')
+          .att('distB', '0')
+          .att('distL', '0')
+          .att('distR', '0')
+          .att('simplePos', '0')
+          .att('relativeHeight', '0')
+          .att('locked', '0')
+          .att('layoutInCell', '1')
+          .att('allowOverlap', '1')
+          .ele('@wp', 'simplePos')
+          .att('x', '0')
+          .att('y', '0')
+          .up()
+          .ele('@wp', 'positionH')
+          .att('relativeFrom', 'page')
+          .ele('@wp', 'posOffset')
+          .txt('0')
+          .up()
+          .up()
+          .ele('@wp', 'positionV')
+          .att('relativeFrom', 'page')
+          .ele('@wp', 'posOffset')
+          .txt('0')
+          .up()
+          .up()
+          .ele('@wp', 'extent')
+          .att('cx', pageWidthEMU)
+          .att('cy', imageHeightEMU)
+          .up()
+          .ele('@wp', 'effectExtent')
+          .att('l', '0')
+          .att('t', '0')
+          .att('r', '0')
+          .att('b', '0')
+          .up()
+          .ele('@wp', 'wrapNone')
+          .up()
+          .ele('@wp', 'docPr')
+          .att('id', '1')
+          .att('name', 'Picture 1')
+          .up()
+          .ele('@wp', 'cNvGraphicFramePr')
+          .ele('@a', 'graphicFrameLocks')
+          .att('noChangeAspect', '1')
+          .up()
+          .up()
+          .ele('@a', 'graphic')
+          .ele('@a', 'graphicData')
+          .att('uri', 'http://schemas.openxmlformats.org/drawingml/2006/picture')
+          .ele('@pic', 'pic')
+          .ele('@pic', 'nvPicPr')
+          .ele('@pic', 'cNvPr')
+          .att('id', '0')
+          .att('name', 'Picture 1')
+          .up()
+          .ele('@pic', 'cNvPicPr')
+          .up()
+          .up()
+          .ele('@pic', 'blipFill')
+          .ele('@a', 'blip')
+          .att('@r', 'embed', `rId${imageRelationshipId}`)
+          .up()
+          .ele('@a', 'stretch')
+          .ele('@a', 'fillRect')
+          .up()
+          .up()
+          .up()
+          .ele('@pic', 'spPr')
+          .ele('@a', 'xfrm')
+          .ele('@a', 'off')
+          .att('x', '0')
+          .att('y', '0')
+          .up()
+          .ele('@a', 'ext')
+          .att('cx', pageWidthEMU)
+          .att('cy', imageHeightEMU)
+          .up()
+          .up()
+          .ele('@a', 'prstGeom')
+          .att('prst', 'rect')
+          .ele('@a', 'avLst')
+          .up()
+          .up()
+          .up()
+          .up()
+          .up()
+          .up()
+          .up()
+          .up()
+          .up()
+          .up();
+      } catch (error) {
+        console.error('Error processing header image:', error);
+      }
+    }
+
+    if (vTree) {
+      const XMLFragment = fragment();
+      await convertVTreeToXML(this, vTree, XMLFragment);
+      headerXML.import(XMLFragment);
+    }
+
+    return { headerId, headerXML };
+  }
+
+  addImage(imageUrl) {
+    const imageFile = this.createMediaFile(imageUrl);
+    this.zip
+      .folder('word/media')
+      .file(imageFile.fileNameWithExtension, imageFile.fileContent, { base64: true });
+    return imageFile;
   }
 
   generateFooterXML(vTree) {

@@ -114,7 +114,8 @@ async function addFilesToContainer(
   htmlString,
   suppliedDocumentOptions,
   headerHTMLString,
-  footerHTMLString
+  footerHTMLString,
+  headerImageUrl
 ) {
   const normalizedDocumentOptions = normalizeDocumentOptions(suppliedDocumentOptions);
   const documentOptions = mergeOptions(defaultDocumentOptions, normalizedDocumentOptions);
@@ -149,11 +150,14 @@ async function addFilesToContainer(
     createFolders: false,
   });
 
-  if (docxDocument.header && headerHTMLString) {
-    const vTree = convertHTML(headerHTMLString);
+  if (docxDocument.header && (headerHTMLString || headerImageUrl)) {
+    const vTree = headerHTMLString ? convertHTML(headerHTMLString) : null;
 
     docxDocument.relationshipFilename = headerFileName;
-    const { headerId, headerXML } = await docxDocument.generateHeaderXML(vTree);
+    const { headerId, headerXML, imageHeightTwips } = await docxDocument.generateHeaderXML(
+      vTree,
+      headerImageUrl
+    );
     docxDocument.relationshipFilename = documentFileName;
     const fileNameWithExt = `${headerType}${headerId}.xml`;
 
@@ -169,7 +173,11 @@ async function addFilesToContainer(
     });
 
     docxDocument.headerObjects.push({ headerId, relationshipId, type: docxDocument.headerType });
+
+    // Adjust section properties to accommodate the header image
+    docxDocument.adjustSectionProperties(imageHeightTwips);
   }
+
   if (docxDocument.footer && footerHTMLString) {
     const vTree = convertHTML(footerHTMLString);
 

@@ -1,17 +1,19 @@
 {
-  "name": "html-to-docx",
-  "version": "1.8.0",
-  "description": "HTML to DOCX converter",
+  "name": "@mark-beeby/html-to-docx",
+  "version": "1.1.0",
+  "description": "HTML to DOCX converter (Fork with custom modifications to support table column widths)",
   "keywords": [
     "html",
     "docx",
     "html-to-docx",
     "html to docx",
     "office",
-    "word"
+    "word",
+    "custom"
   ],
   "main": "dist/html-to-docx.umd.js",
   "module": "dist/html-to-docx.esm.js",
+  "forkedFrom": "https://github.com/privateOmega/html-to-docx",
   "scripts": {
     "test": "npm run build && node example/example-node.js",
     "prerelease": "rollup -c",
@@ -24,10 +26,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/privateOmega/html-to-docx.git"
+    "url": "git+https://github.com/mark-beeby/html-to-docx.git"
   },
-  "author": "privateOmega <privateOmega@protonmail.com>",
+  "author": "Mark Beeby <mark.beeby@gmail.com>",
   "contributors": [
+    "privateOmega <privateOmega@protonmail.com>",
     "amrita-syn <amrita.yadav@synapsica.com>",
     "charuthaB <charutha.bhaskar@synapsica.com>",
     "hanagejet",
@@ -43,9 +46,9 @@
   ],
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/privateOmega/html-to-docx/issues"
+    "url": "https://github.com/mark-beeby/html-to-docx/issues"
   },
-  "homepage": "https://github.com/privateOmega/html-to-docx#readme",
+  "homepage": "https://github.com/mark-beeby/html-to-docx#readme",
   "devDependencies": {
     "@commitlint/cli": "^13.1.0",
     "@commitlint/config-conventional": "^13.1.0",
@@ -67,8 +70,8 @@
     "standard-version": "^9.3.1"
   },
   "dependencies": {
-    "@oozcitak/util": "8.3.4",
     "@oozcitak/dom": "1.15.6",
+    "@oozcitak/util": "8.3.4",
     "color-name": "^1.1.4",
     "html-entities": "^2.3.3",
     "html-to-vdom": "^0.7.0",
@@ -78,6 +81,7 @@
     "lodash": "^4.17.21",
     "mime-types": "^2.1.35",
     "nanoid": "^3.1.25",
+    "sharp": "^0.33.5",
     "virtual-dom": "^2.1.1",
     "xmlbuilder2": "2.1.2"
   },

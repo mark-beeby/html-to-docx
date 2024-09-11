@@ -20,13 +20,13 @@ Currently it doesn't work with browser directly, but it was tested against React
 Use the npm to install foobar.
 
 ```bash
-npm install html-to-docx
+npm install @mark-beeby/html-to-docx
 ```
 
 ## Usage
 
 ```js
-await HTMLtoDOCX(htmlString, headerHTMLString, documentOptions, footerHTMLString)
+await HTMLtoDOCX(htmlString, headerHTMLString, documentOptions, footerHTMLString, headerImageUrl)
 ```
 
 full fledged examples can be found under `example/`
