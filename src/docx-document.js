@@ -2,7 +2,6 @@ import { create, fragment } from 'xmlbuilder2';
 import { nanoid } from 'nanoid';
 import https from 'https';
 import http from 'http';
-import { URL } from 'url';
 import sharp from 'sharp';
 import {
   generateCoreXML,
@@ -193,6 +192,32 @@ class DocxDocument {
     this.ListStyleBuilder = new ListStyleBuilder(properties.numbering);
   }
 
+  calculateHeaderHeight() {
+    // Start with the base header height (720 TWIPs = 0.5 inches)
+    let headerHeight = 720;
+
+    // Add height for background image if present
+    if (this.backgroundImageHeight) {
+      headerHeight = Math.max(headerHeight, this.backgroundImageHeight);
+    }
+
+    // Add height for logos
+    if (this.logoHeights && this.logoHeights.length > 0) {
+      const maxLogoHeight = Math.max(...this.logoHeights);
+      headerHeight = Math.max(headerHeight, maxLogoHeight);
+    }
+
+    // Add height for vTree content
+    if (this.vTreeHeight) {
+      headerHeight += this.vTreeHeight;
+    }
+
+    // Add some padding (e.g., 0.1 inches = 144 TWIPs)
+    headerHeight += 144;
+
+    return headerHeight;
+  }
+
   generateContentTypesXML() {
     const contentTypesXML = create({ encoding: 'UTF-8', standalone: true }, contentTypesXMLString);
 
@@ -242,16 +267,55 @@ class DocxDocument {
     if (this.sectionProperties) {
       const body = documentXML.root().first();
 
-      // Iterate through child elements to find and modify existing sectPr
+      // Find existing sectPr or create a new one
+      let sectPr;
       body.each((child) => {
         if (child.node.nodeName === 'w:sectPr') {
-          // Remove the existing sectPr
-          child.remove();
+          sectPr = child;
+          return false; // Stop iteration
         }
       });
 
-      // Append the new sectPr at the end of the body
-      body.import(this.sectionProperties.root());
+      if (!sectPr) {
+        sectPr = body.ele('w:sectPr');
+      }
+
+      // Find or create pgMar in sectPr
+      let pgMar;
+      sectPr.each((child) => {
+        if (child.node.nodeName === 'w:pgMar') {
+          pgMar = child;
+          return false; // Stop iteration
+        }
+      });
+
+      if (!pgMar) {
+        pgMar = sectPr.ele('w:pgMar');
+      }
+
+      // Ensure other necessary elements from this.sectionProperties are present
+      if (typeof this.sectionProperties.each === 'function') {
+        this.sectionProperties.each((child) => {
+          if (child.node.nodeName !== 'w:pgMar') {
+            let existingChild;
+            sectPr.each((sectionChild) => {
+              if (sectionChild.node.nodeName === child.node.nodeName) {
+                existingChild = sectionChild;
+                return false; // Stop iteration
+              }
+            });
+
+            if (!existingChild) {
+              sectPr.import(child);
+            }
+          }
+        });
+      }
+    }
+
+    // Use the updated section properties
+    if (this.sectionProperties) {
+      documentXML.root().first().import(this.sectionProperties);
     }
 
     return documentXML.toString({ prettyPrint: true });
@@ -537,40 +601,7 @@ class DocxDocument {
     return lastRelsId;
   }
 
-  adjustSectionProperties() {
-    // const headerHeight = Math.min(Math.max(imageHeightTwips || 0, 0), 9000);
-
-    this.sectionProperties = create({ encoding: 'UTF-8', standalone: true }).ele('w:sectPr', {
-      'xmlns:w': namespaces.w,
-      'xmlns:r': namespaces.r,
-    });
-
-    if (this.width && this.height) {
-      this.sectionProperties
-        .ele('w:pgSz')
-        .att('w:w', this.width.toString())
-        .att('w:h', this.height.toString())
-        .up();
-    }
-    if (this.pageNumberStart) {
-      this.sectionProperties
-        .ele('w:pgNumType')
-        .att('w:start', this.pageNumberStart.toString())
-        .up();
-    }
-
-    if (this.headerObjects && this.headerObjects[0] && this.headerObjects[0].relationshipId) {
-      this.sectionProperties
-        .ele('w:headerReference')
-        .att('w:type', 'default')
-        .att('r:id', `rId${this.headerObjects[0].relationshipId}`)
-        .up();
-    }
-
-    return this.sectionProperties;
-  }
-
-  async generateHeaderXML(vTree, headerImageUrl) {
+  async generateHeaderXML(vTree, headerConfig) {
     const headerId = this.lastHeaderId + 1;
     this.lastHeaderId = headerId;
 
@@ -593,177 +624,420 @@ class DocxDocument {
       },
     }).ele('@w', 'hdr');
 
-    if (headerImageUrl) {
-      try {
-        // Fetch the image and get its dimensions
-        const { base64String, width, height } = await new Promise((resolve, reject) => {
-          const url = new URL(headerImageUrl);
-          const protocol = url.protocol === 'https:' ? https : http;
+    this.backgroundImageHeight = 0;
+    this.logoHeights = [];
 
-          protocol
-            .get(url, (response) => {
-              if (response.statusCode !== 200) {
-                reject(new Error(`Failed to fetch image: ${response.statusCode}`));
-                return;
-              }
+    this.backgroundImageHeight = 0;
+    this.logoHeights = [];
+    let headerHeight = null;
 
-              const chunks = [];
-              response.on('data', (chunk) => chunks.push(chunk));
-              response.on('end', () => {
-                const buffer = Buffer.concat(chunks);
-                const base64 = buffer.toString('base64');
-                const mimeType = response.headers['content-type'];
-
-                // Get image dimensions
-                sharp(buffer)
-                  .metadata()
-                  .then((metadata) => {
-                    resolve({
-                      base64String: `data:${mimeType};base64,${base64}`,
-                      width: metadata.width,
-                      height: metadata.height,
-                    });
-                  })
-                  .catch((err) => reject(err));
-              });
-            })
-            .on('error', reject);
-        });
-
-        // Calculate the height while maintaining aspect ratio
-        const aspectRatio = width / height;
-        const imageHeightEMU = Math.round(pageWidthEMU / aspectRatio);
-
-        // Store the calculated height in twips for later use
-        this.headerHeight = Math.round(imageHeightEMU / 635);
-
-        const imageFile = this.createMediaFile(base64String);
-        const imageRelationshipId = this.createDocumentRelationships(
-          `header${headerId}`,
-          imageType,
-          `media/${imageFile.fileNameWithExtension}`,
-          'Internal'
+    if (headerConfig) {
+      if (headerConfig.backgroundImage) {
+        const backgroundHeight = await this.addBackgroundImage(
+          headerXML,
+          headerConfig.backgroundImage,
+          headerId,
+          pageWidthEMU
         );
-
-        // Add the image file to the zip
-        this.zip
-          .folder('word/media')
-          .file(imageFile.fileNameWithExtension, imageFile.fileContent, { base64: true });
-
-        headerXML
-          .ele('@w', 'p')
-          .ele('@w', 'pPr')
-          .ele('@w', 'pStyle')
-          .att('@w', 'val', 'Header')
-          .up()
-          .up()
-          .ele('@w', 'r')
-          .ele('@w', 'drawing')
-          .ele('@wp', 'anchor')
-          .att('behindDoc', '1')
-          .att('distT', '0')
-          .att('distB', '0')
-          .att('distL', '0')
-          .att('distR', '0')
-          .att('simplePos', '0')
-          .att('relativeHeight', '0')
-          .att('locked', '0')
-          .att('layoutInCell', '1')
-          .att('allowOverlap', '1')
-          .ele('@wp', 'simplePos')
-          .att('x', '0')
-          .att('y', '0')
-          .up()
-          .ele('@wp', 'positionH')
-          .att('relativeFrom', 'page')
-          .ele('@wp', 'posOffset')
-          .txt('0')
-          .up()
-          .up()
-          .ele('@wp', 'positionV')
-          .att('relativeFrom', 'page')
-          .ele('@wp', 'posOffset')
-          .txt('0')
-          .up()
-          .up()
-          .ele('@wp', 'extent')
-          .att('cx', pageWidthEMU)
-          .att('cy', imageHeightEMU)
-          .up()
-          .ele('@wp', 'effectExtent')
-          .att('l', '0')
-          .att('t', '0')
-          .att('r', '0')
-          .att('b', '0')
-          .up()
-          .ele('@wp', 'wrapNone')
-          .up()
-          .ele('@wp', 'docPr')
-          .att('id', '1')
-          .att('name', 'Picture 1')
-          .up()
-          .ele('@wp', 'cNvGraphicFramePr')
-          .ele('@a', 'graphicFrameLocks')
-          .att('noChangeAspect', '1')
-          .up()
-          .up()
-          .ele('@a', 'graphic')
-          .ele('@a', 'graphicData')
-          .att('uri', 'http://schemas.openxmlformats.org/drawingml/2006/picture')
-          .ele('@pic', 'pic')
-          .ele('@pic', 'nvPicPr')
-          .ele('@pic', 'cNvPr')
-          .att('id', '0')
-          .att('name', 'Picture 1')
-          .up()
-          .ele('@pic', 'cNvPicPr')
-          .up()
-          .up()
-          .ele('@pic', 'blipFill')
-          .ele('@a', 'blip')
-          .att('@r', 'embed', `rId${imageRelationshipId}`)
-          .up()
-          .ele('@a', 'stretch')
-          .ele('@a', 'fillRect')
-          .up()
-          .up()
-          .up()
-          .ele('@pic', 'spPr')
-          .ele('@a', 'xfrm')
-          .ele('@a', 'off')
-          .att('x', '0')
-          .att('y', '0')
-          .up()
-          .ele('@a', 'ext')
-          .att('cx', pageWidthEMU)
-          .att('cy', imageHeightEMU)
-          .up()
-          .up()
-          .ele('@a', 'prstGeom')
-          .att('prst', 'rect')
-          .ele('@a', 'avLst')
-          .up()
-          .up()
-          .up()
-          .up()
-          .up()
-          .up()
-          .up()
-          .up()
-          .up()
-          .up();
-      } catch (error) {
-        console.error('Error processing header image:', error);
+        this.backgroundImageHeight = Math.ceil(backgroundHeight / 635); // Convert EMUs to TWIPs
       }
+
+      if (headerConfig.logos && Array.isArray(headerConfig.logos)) {
+        for (const logo of headerConfig.logos) {
+          const logoHeight = await this.addLogo(headerXML, logo, headerId);
+          this.logoHeights.push(Math.ceil(logoHeight / 635)); // Convert EMUs to TWIPs
+        }
+      }
+
+      // Calculate the header height
+      headerHeight = this.calculateHeaderHeight();
     }
 
     if (vTree) {
       const XMLFragment = fragment();
       await convertVTreeToXML(this, vTree, XMLFragment);
       headerXML.import(XMLFragment);
+
+      // Estimate the height of the vTree content
+      this.vTreeHeight = Math.ceil(this.estimateVTreeHeight(XMLFragment) / 635); // Convert EMUs to TWIPs
     }
 
-    return { headerId, headerXML };
+    return { headerId, headerXML, headerHeight };
+  }
+
+  // Helper method to estimate vTree height
+  estimateVTreeHeight(xmlFragment) {
+    // Convert the XML fragment to a string
+    const xmlString = xmlFragment.toString();
+
+    // Estimate height based on string length
+    // This is a very rough estimate: assume 1 character is about 100 EMUs high
+    const estimatedHeight = xmlString.length * 100;
+
+    // Ensure a minimum height of 360000 EMUs (about 0.25 inches)
+    return Math.max(estimatedHeight, 360000);
+  }
+
+  async addBackgroundImage(headerXML, backgroundImage, headerId, pageWidthEMU) {
+    const { url, width, height } = backgroundImage;
+    try {
+      const { base64String, imageWidth, imageHeight } = await this.fetchImageAndGetDimensions(url);
+      const imageFile = this.createMediaFile(base64String);
+      const imageRelationshipId = this.createDocumentRelationships(
+        `header${headerId}`,
+        imageType,
+        `media/${imageFile.fileNameWithExtension}`,
+        'Internal'
+      );
+
+      // Add the image file to the zip
+      this.zip
+        .folder('word/media')
+        .file(imageFile.fileNameWithExtension, imageFile.fileContent, { base64: true });
+
+      // Calculate the height while maintaining aspect ratio
+      const aspectRatio = imageWidth / imageHeight;
+      const imageHeightEMU = Math.round(pageWidthEMU / aspectRatio);
+
+      headerXML
+        .ele('@w', 'p')
+        .ele('@w', 'pPr')
+        .ele('@w', 'pStyle')
+        .att('@w', 'val', 'Header')
+        .up()
+        .up()
+        .ele('@w', 'r')
+        .ele('@w', 'drawing')
+        .ele('@wp', 'anchor')
+        .att('behindDoc', '1')
+        .att('distT', '0')
+        .att('distB', '0')
+        .att('distL', '0')
+        .att('distR', '0')
+        .att('simplePos', '0')
+        .att('relativeHeight', '0')
+        .att('locked', '0')
+        .att('layoutInCell', '1')
+        .att('allowOverlap', '1')
+        .ele('@wp', 'simplePos')
+        .att('x', '0')
+        .att('y', '0')
+        .up()
+        .ele('@wp', 'positionH')
+        .att('relativeFrom', 'page')
+        .ele('@wp', 'posOffset')
+        .txt('0')
+        .up()
+        .up()
+        .ele('@wp', 'positionV')
+        .att('relativeFrom', 'page')
+        .ele('@wp', 'posOffset')
+        .txt('0')
+        .up()
+        .up()
+        .ele('@wp', 'extent')
+        .att('cx', pageWidthEMU)
+        .att('cy', imageHeightEMU)
+        .up()
+        .ele('@wp', 'effectExtent')
+        .att('l', '0')
+        .att('t', '0')
+        .att('r', '0')
+        .att('b', '0')
+        .up()
+        .ele('@wp', 'wrapNone')
+        .up()
+        .ele('@wp', 'docPr')
+        .att('id', '1')
+        .att('name', 'Background Picture')
+        .up()
+        .ele('@wp', 'cNvGraphicFramePr')
+        .ele('@a', 'graphicFrameLocks')
+        .att('noChangeAspect', '1')
+        .up()
+        .up()
+        .ele('@a', 'graphic')
+        .ele('@a', 'graphicData')
+        .att('uri', 'http://schemas.openxmlformats.org/drawingml/2006/picture')
+        .ele('@pic', 'pic')
+        .ele('@pic', 'nvPicPr')
+        .ele('@pic', 'cNvPr')
+        .att('id', '0')
+        .att('name', 'Background Picture')
+        .up()
+        .ele('@pic', 'cNvPicPr')
+        .up()
+        .up()
+        .ele('@pic', 'blipFill')
+        .ele('@a', 'blip')
+        .att('@r', 'embed', `rId${imageRelationshipId}`)
+        .up()
+        .ele('@a', 'stretch')
+        .ele('@a', 'fillRect')
+        .up()
+        .up()
+        .up()
+        .ele('@pic', 'spPr')
+        .ele('@a', 'xfrm')
+        .ele('@a', 'off')
+        .att('x', '0')
+        .att('y', '0')
+        .up()
+        .ele('@a', 'ext')
+        .att('cx', pageWidthEMU)
+        .att('cy', imageHeightEMU)
+        .up()
+        .up()
+        .ele('@a', 'prstGeom')
+        .att('prst', 'rect')
+        .ele('@a', 'avLst')
+        .up()
+        .up()
+        .up()
+        .up()
+        .up()
+        .up()
+        .up()
+        .up()
+        .up()
+        .up();
+    } catch (error) {
+      console.error('Error processing background image:', error);
+    }
+  }
+
+  async addLogo(headerXML, logo, headerId) {
+    const { url, width, height, alignment } = logo;
+
+    try {
+      const { base64String, imageWidth, imageHeight, mimeType } =
+        await this.fetchImageAndGetDimensions(url);
+      const imageFile = this.createMediaFile(base64String);
+      const imageRelationshipId = this.createDocumentRelationships(
+        `header${headerId}`,
+        imageType,
+        `media/${imageFile.fileNameWithExtension}`,
+        'Internal'
+      );
+
+      // Add the image file to the zip
+      this.zip
+        .folder('word/media')
+        .file(imageFile.fileNameWithExtension, imageFile.fileContent, { base64: true });
+
+      // Calculate dimensions based on provided width or height, maintaining aspect ratio
+      const aspectRatio = imageWidth / imageHeight;
+      let widthEMU;
+      let heightEMU;
+
+      if (width && !height) {
+        widthEMU = Math.round(parseFloat(width) * 9525); // 1 px = 9525 EMUs
+        heightEMU = Math.round(widthEMU / aspectRatio);
+      } else if (!width && height) {
+        heightEMU = Math.round(parseFloat(height) * 9525);
+        widthEMU = Math.round(heightEMU * aspectRatio);
+      } else if (width && height) {
+        widthEMU = Math.round(parseFloat(width) * 9525);
+        heightEMU = Math.round(parseFloat(height) * 9525);
+      } else {
+        // If neither width nor height is provided, use original dimensions
+        widthEMU = Math.round(imageWidth * 9525);
+        heightEMU = Math.round(imageHeight * 9525);
+      }
+
+      const paragraph = headerXML.ele('@w', 'p');
+      paragraph
+        .ele('@w', 'r')
+        .ele('@w', 'drawing')
+        .ele('@wp', 'anchor')
+        .att('behindDoc', '1')
+        .att('distT', '0')
+        .att('distB', '0')
+        .att('distL', '0')
+        .att('distR', '0')
+        .att('simplePos', '0')
+        .att('relativeHeight', '0')
+        .att('locked', '0')
+        .att('layoutInCell', '1')
+        .att('allowOverlap', '1')
+        .ele('@wp', 'simplePos')
+        .att('x', '0')
+        .att('y', '0')
+        .up()
+        .ele('@wp', 'positionH')
+        .att('relativeFrom', 'column')
+        .ele('@wp', 'align')
+        .txt(alignment)
+        .up()
+        .up()
+        .ele('@wp', 'positionV')
+        .att('relativeFrom', 'paragraph')
+        .ele('@wp', 'posOffset')
+        .txt('0')
+        .up()
+        .up()
+        .ele('@wp', 'extent')
+        .att('cx', widthEMU)
+        .att('cy', heightEMU)
+        .up()
+        .ele('@wp', 'effectExtent')
+        .att('l', '0')
+        .att('t', '0')
+        .att('r', '0')
+        .att('b', '0')
+        .up()
+        .ele('@wp', 'wrapNone')
+        .up()
+        .ele('@wp', 'docPr')
+        .att('id', '1')
+        .att('name', 'Logo')
+        .up()
+        .ele('@wp', 'cNvGraphicFramePr')
+        .ele('@a', 'graphicFrameLocks')
+        .att('noChangeAspect', '1')
+        .up()
+        .up()
+        .ele('@a', 'graphic')
+        .ele('@a', 'graphicData')
+        .att('uri', 'http://schemas.openxmlformats.org/drawingml/2006/picture')
+        .ele('@pic', 'pic')
+        .ele('@pic', 'nvPicPr')
+        .ele('@pic', 'cNvPr')
+        .att('id', '0')
+        .att('name', 'Logo')
+        .up()
+        .ele('@pic', 'cNvPicPr')
+        .up()
+        .up()
+        .ele('@pic', 'blipFill')
+        .ele('@a', 'blip')
+        .att('@r', 'embed', `rId${imageRelationshipId}`)
+        .up()
+        .ele('@a', 'stretch')
+        .ele('@a', 'fillRect')
+        .up()
+        .up()
+        .up()
+        .ele('@pic', 'spPr')
+        .ele('@a', 'xfrm')
+        .ele('@a', 'off')
+        .att('x', '0')
+        .att('y', '0')
+        .up()
+        .ele('@a', 'ext')
+        .att('cx', widthEMU)
+        .att('cy', heightEMU)
+        .up()
+        .up()
+        .ele('@a', 'prstGeom')
+        .att('prst', 'rect')
+        .ele('@a', 'avLst')
+        .up()
+        .up()
+        .up()
+        .up()
+        .up()
+        .up()
+        .up()
+        .up();
+
+      return heightEMU; // Return the height of the logo in EMUs
+    } catch (error) {
+      console.error('Error processing logo:', error);
+      return 0; // Return 0 if there was an error
+    }
+  }
+
+  async fetchImageAndGetDimensions(url) {
+    return new Promise((resolve, reject) => {
+      const protocol = url.startsWith('https') ? https : http;
+      protocol
+        .get(url, (response) => {
+          if (response.statusCode !== 200) {
+            reject(new Error(`Failed to fetch image: ${response.statusCode}`));
+            return;
+          }
+
+          const chunks = [];
+          response.on('data', (chunk) => chunks.push(chunk));
+          response.on('end', async () => {
+            const buffer = Buffer.concat(chunks);
+            const base64 = buffer.toString('base64');
+            const mimeType = response.headers['content-type'];
+
+            try {
+              if (mimeType === 'image/svg+xml') {
+                const svgString = buffer.toString('utf-8');
+                const { width, height } = await this.getSVGDimensions(svgString);
+                resolve({
+                  base64String: `data:${mimeType};base64,${base64}`,
+                  imageWidth: width,
+                  imageHeight: height,
+                  mimeType,
+                });
+              } else {
+                // For other image types, use sharp
+                const metadata = await sharp(buffer).metadata();
+                resolve({
+                  base64String: `data:${mimeType};base64,${base64}`,
+                  imageWidth: metadata.width,
+                  imageHeight: metadata.height,
+                  mimeType,
+                });
+              }
+            } catch (err) {
+              reject(err);
+            }
+          });
+        })
+        .on('error', reject);
+    });
+  }
+
+  async getSVGDimensions(svgString) {
+    // First, try to get dimensions from viewBox
+    const viewBoxMatch = svgString.match(/viewBox="([^"]+)"/);
+    if (viewBoxMatch) {
+      const [minX, minY, width, height] = viewBoxMatch[1].split(/\s+/).map(Number);
+      return { width, height };
+    }
+
+    // If viewBox is not available, fall back to width and height attributes
+    const widthMatch = svgString.match(/width="([^"]+)"/);
+    const heightMatch = svgString.match(/height="([^"]+)"/);
+
+    let width = widthMatch ? this.parseLength(widthMatch[1]) : null;
+    let height = heightMatch ? this.parseLength(heightMatch[1]) : null;
+
+    // If dimensions are still not found, use default values
+    width = width || 300; // Default width
+    height = height || 150; // Default height
+
+    return { width, height };
+  }
+
+  parseLength(length) {
+    if (typeof length === 'number') return length;
+
+    const match = length.match(/^(\d+(?:\.\d+)?)(px|pt|em|ex|%)?$/);
+    if (!match) return null;
+
+    const value = parseFloat(match[1]);
+    const unit = match[2] || 'px';
+
+    switch (unit) {
+      case 'px':
+        return value;
+      case 'pt':
+        return value * 1.33333; // 1pt = 1.33333px
+      case 'em':
+      case 'ex':
+      case '%':
+        // For relative units, we'll just use the numeric value as pixels
+        return value;
+      default:
+        return value;
+    }
   }
 
   addImage(imageUrl) {

@@ -26,10 +26,47 @@ npm install @mark-beeby/html-to-docx
 ## Usage
 
 ```js
-await HTMLtoDOCX(htmlString, headerHTMLString, documentOptions, footerHTMLString, headerImageUrl)
+await HTMLtoDOCX(htmlString, headerHTMLString, documentOptions, footerHTMLString, headerConfig)
 ```
 
-full fledged examples can be found under `example/`
+## Example
+
+```js
+await HTMLtoDOCX(htmlString, headerHTMLString, documentOptions, footerHTMLString, headerConfig)
+```
+
+Here's an example of how to use the headerConfig:
+```js
+await HTMLtoDOCX(
+  htmlString,
+  headerHTMLString,
+  documentOptions,
+  footerHTMLString,
+  {
+    backgroundImage: {
+      url: 'https://example.com/background.jpg',
+      width: '100%',
+      height: '150px'
+    },
+    logos: [
+      {
+        url: 'https://example.com/logo1.png',
+        width: '100px',
+        height: '50px',
+        alignment: 'left'
+      },
+      {
+        url: 'https://example.com/logo2.png',
+        width: '80px',
+        height: '40px',
+        alignment: 'right'
+      }
+    ]
+  }
+)
+```
+
+Full fledged examples can be found under `example/`
 
 ### Parameters
 
@@ -79,6 +116,16 @@ full fledged examples can be found under `example/`
   - `decodeUnicode` <?[Boolean]> flag to enable unicode decoding of header, body and footer. Defaults to `false`.
   - `lang` <?[String]> language localization code for spell checker to work properly. Defaults to `en-US`.
 - `footerHTMLString` <[String]> clean html string equivalent of footer. Defaults to `<p></p>` if footer flag is `true`.
+- `headerConfig` <?[Object]> configuration for header images and logos. 
+  - `backgroundImage` <?[Object]> configuration for the header background image.
+    - `url` <[String]> URL of the background image.
+    - `width` <[String]> width of the background image (e.g., '100%').
+    - `height` <[String]> height of the background image (e.g., '100px'). 
+  - `logos` <?[Array]<[Object]>> array of logo configurations. 
+    - `url` <[String]> URL of the logo image.
+    - `width` <[String]> width of the logo (e.g., '50px'). 
+    - `height` <[String]> height of the logo (e.g., '50px'). 
+    - `alignment` <"left"|"center"|"right"> alignment of the logo.
 
 ### Returns
 

@@ -115,7 +115,7 @@ async function addFilesToContainer(
   suppliedDocumentOptions,
   headerHTMLString,
   footerHTMLString,
-  headerImageUrl
+  headerConfig
 ) {
   const normalizedDocumentOptions = normalizeDocumentOptions(suppliedDocumentOptions);
   const documentOptions = mergeOptions(defaultDocumentOptions, normalizedDocumentOptions);
@@ -150,14 +150,19 @@ async function addFilesToContainer(
     createFolders: false,
   });
 
-  if (docxDocument.header && (headerHTMLString || headerImageUrl)) {
+  if (docxDocument.header && (headerHTMLString || headerConfig)) {
     const vTree = headerHTMLString ? convertHTML(headerHTMLString) : null;
 
     docxDocument.relationshipFilename = headerFileName;
-    const { headerId, headerXML, imageHeightTwips } = await docxDocument.generateHeaderXML(
+    const { headerId, headerXML, headerHeight } = await docxDocument.generateHeaderXML(
       vTree,
-      headerImageUrl
+      headerConfig
     );
+    if (headerHeight !== null) {
+      docxDocument.margins.header = docxDocument.margins.top || '720';
+      docxDocument.margins.top =
+        parseInt(docxDocument.margins.top, 10) + parseInt(headerHeight, 10) + 200;
+    }
     docxDocument.relationshipFilename = documentFileName;
     const fileNameWithExt = `${headerType}${headerId}.xml`;
 
@@ -173,9 +178,6 @@ async function addFilesToContainer(
     });
 
     docxDocument.headerObjects.push({ headerId, relationshipId, type: docxDocument.headerType });
-
-    // Adjust section properties to accommodate the header image
-    docxDocument.adjustSectionProperties(imageHeightTwips);
   }
 
   if (docxDocument.footer && footerHTMLString) {
