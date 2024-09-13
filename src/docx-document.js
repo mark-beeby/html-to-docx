@@ -213,7 +213,7 @@ class DocxDocument {
     }
 
     // Add some padding (e.g., 0.1 inches = 144 TWIPs)
-    headerHeight += 144;
+    headerHeight += 440;
 
     return headerHeight;
   }
