@@ -294,58 +294,48 @@ const fixupMargin = (marginString) => {
 const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes, options) => {
   const modifiedAttributes = { ...attributes };
 
-  // styles
   if (isVNode(vNode) && vNode.properties && vNode.properties.style) {
-    if (vNode.properties.style.color && !colorlessColors.includes(vNode.properties.style.color)) {
-      modifiedAttributes.color = fixupColorCode(vNode.properties.style.color);
-    }
+    const { style } = vNode.properties;
 
+    if (style['font-family']) {
+      modifiedAttributes.font = docxDocumentInstance.createFont(style['font-family']);
+    }
+    if (style['font-size']) {
+      modifiedAttributes.fontSize = fixupFontSize(style['font-size']);
+    }
+    if (style.color && !colorlessColors.includes(style.color)) {
+      modifiedAttributes.color = fixupColorCode(style.color);
+    }
+    if (style['background-color'] && !colorlessColors.includes(style['background-color'])) {
+      modifiedAttributes.backgroundColor = fixupColorCode(style['background-color']);
+    }
+    if (style['vertical-align'] && verticalAlignValues.includes(style['vertical-align'])) {
+      modifiedAttributes.verticalAlign = style['vertical-align'];
+    }
     if (
-      vNode.properties.style['background-color'] &&
-      !colorlessColors.includes(vNode.properties.style['background-color'])
+      style['text-align'] &&
+      ['left', 'right', 'center', 'justify'].includes(style['text-align'])
     ) {
-      modifiedAttributes.backgroundColor = fixupColorCode(
-        vNode.properties.style['background-color']
-      );
+      modifiedAttributes.textAlign = style['text-align'].toUpperCase();
     }
-
-    if (
-      vNode.properties.style['vertical-align'] &&
-      verticalAlignValues.includes(vNode.properties.style['vertical-align'])
-    ) {
-      modifiedAttributes.verticalAlign = vNode.properties.style['vertical-align'];
+    if (style['font-weight'] && style['font-weight'] === 'bold') {
+      modifiedAttributes.strong = style['font-weight'];
     }
-
-    if (
-      vNode.properties.style['text-align'] &&
-      ['left', 'right', 'center', 'justify'].includes(vNode.properties.style['text-align'])
-    ) {
-      modifiedAttributes.textAlign = vNode.properties.style['text-align'];
-    }
-
-    // FIXME: remove bold check when other font weights are handled.
-    if (vNode.properties.style['font-weight'] && vNode.properties.style['font-weight'] === 'bold') {
-      modifiedAttributes.strong = vNode.properties.style['font-weight'];
-    }
-    if (vNode.properties.style['font-family']) {
-      modifiedAttributes.font = docxDocumentInstance.createFont(
-        vNode.properties.style['font-family']
-      );
-    }
-    if (vNode.properties.style['font-size']) {
-      modifiedAttributes.fontSize = fixupFontSize(vNode.properties.style['font-size']);
-    }
-    if (vNode.properties.style['line-height']) {
+    if (style['line-height']) {
       modifiedAttributes.lineHeight = fixupLineHeight(
-        vNode.properties.style['line-height'],
-        vNode.properties.style['font-size']
-          ? fixupFontSize(vNode.properties.style['font-size'])
-          : null
+        style['line-height'],
+        modifiedAttributes.fontSize
       );
     }
-    if (vNode.properties.style['margin-left'] || vNode.properties.style['margin-right']) {
-      const leftMargin = fixupMargin(vNode.properties.style['margin-left']);
-      const rightMargin = fixupMargin(vNode.properties.style['margin-right']);
+    if (style['margin-top']) {
+      modifiedAttributes.marginTop = fixupMargin(style['margin-top']);
+    }
+    if (style['margin-bottom']) {
+      modifiedAttributes.marginBottom = fixupMargin(style['margin-bottom']);
+    }
+    if (style['margin-left'] || style['margin-right']) {
+      const leftMargin = fixupMargin(style['margin-left']);
+      const rightMargin = fixupMargin(style['margin-right']);
       const indentation = {};
       if (leftMargin) {
         indentation.left = leftMargin;
@@ -357,13 +347,27 @@ const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes,
         modifiedAttributes.indentation = indentation;
       }
     }
-    if (vNode.properties.style.display) {
-      modifiedAttributes.display = vNode.properties.style.display;
+    if (style.display) {
+      modifiedAttributes.display = style.display;
     }
+    if (style.width) {
+      modifiedAttributes.width = style.width;
+    }
+  }
 
-    if (vNode.properties.style.width) {
-      modifiedAttributes.width = vNode.properties.style.width;
-    }
+  // Handle classes
+  if (isVNode(vNode) && vNode.properties && vNode.properties.className) {
+    const classes = vNode.properties.className.split(' ');
+    classes.forEach((className) => {
+      if (className.startsWith('mb-')) {
+        const value = parseInt(className.slice(3), 10) * 4;
+        modifiedAttributes.marginBottom = pixelToTWIP(value);
+      }
+      if (className.startsWith('mt-')) {
+        const value = parseInt(className.slice(3), 10) * 4;
+        modifiedAttributes.marginTop = pixelToTWIP(value);
+      }
+    });
   }
 
   // paragraph only
@@ -437,6 +441,12 @@ const buildRunProperties = (attributes) => {
 
       if (key === 'fontSize' || key === 'font') {
         options[key] = attributes[key];
+      }
+
+      // Handle new attributes
+      if (key === 'textAlign' || key === 'lineHeight') {
+        // These are paragraph-level properties, so we don't need to handle them here
+        return;
       }
 
       const formattingFragment = buildFormatting(key, options);
@@ -709,6 +719,7 @@ const buildSpacing = (lineSpacing, beforeSpacing, afterSpacing) => {
 
   if (lineSpacing) {
     spacingFragment.att('@w', 'line', lineSpacing);
+    spacingFragment.att('@w', 'lineRule', 'auto');
   }
   if (beforeSpacing) {
     spacingFragment.att('@w', 'before', beforeSpacing);
@@ -717,7 +728,7 @@ const buildSpacing = (lineSpacing, beforeSpacing, afterSpacing) => {
     spacingFragment.att('@w', 'after', afterSpacing);
   }
 
-  spacingFragment.att('@w', 'lineRule', 'auto').up();
+  spacingFragment.up();
 
   return spacingFragment;
 };
@@ -821,22 +832,28 @@ const buildParagraphProperties = (attributes) => {
           // eslint-disable-next-line no-param-reassign
           delete attributes.indentation;
           break;
+        case 'marginBottom':
+          const spacingAfterFragment = buildSpacing(null, null, attributes[key]);
+          paragraphPropertiesFragment.import(spacingAfterFragment);
+          break;
       }
     });
 
-    const spacingFragment = buildSpacing(
-      attributes.lineHeight,
-      attributes.beforeSpacing,
-      attributes.afterSpacing
-    );
-    // eslint-disable-next-line no-param-reassign
-    delete attributes.lineHeight;
-    // eslint-disable-next-line no-param-reassign
-    delete attributes.beforeSpacing;
-    // eslint-disable-next-line no-param-reassign
-    delete attributes.afterSpacing;
-
-    paragraphPropertiesFragment.import(spacingFragment);
+    // Only add spacing if it's explicitly defined
+    if (attributes.lineHeight || attributes.marginTop || attributes.marginBottom) {
+      const spacingFragment = buildSpacing(
+        attributes.lineHeight,
+        attributes.marginTop,
+        attributes.marginBottom
+      );
+      // eslint-disable-next-line no-param-reassign
+      delete attributes.lineHeight;
+      // eslint-disable-next-line no-param-reassign
+      delete attributes.beforeSpacing;
+      // eslint-disable-next-line no-param-reassign
+      delete attributes.afterSpacing;
+      paragraphPropertiesFragment.import(spacingFragment);
+    }
   }
   paragraphPropertiesFragment.up();
 
@@ -924,8 +941,32 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
       isParagraph: true,
     }
   );
+
+  // Check if this is a spacer paragraph
+  if (isVNode(vNode) && vNode.properties && vNode.properties['data-spacing-after']) {
+    const spacingValue = vNode.properties['data-spacing-after'];
+    const spacingFragment = buildSpacing(null, null, spacingValue);
+    const paragraphPropertiesFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele(
+      '@w',
+      'pPr'
+    );
+    paragraphPropertiesFragment.import(spacingFragment);
+    paragraphFragment.import(paragraphPropertiesFragment);
+    paragraphFragment.up();
+    return paragraphFragment;
+  }
+
+  // Handle inline styles
+  if (isVNode(vNode) && vNode.properties && vNode.properties.style) {
+    const { style } = vNode.properties;
+    if (style['margin-bottom']) {
+      modifiedAttributes.marginBottom = fixupMargin(style['margin-bottom']);
+    }
+  }
+
   const paragraphPropertiesFragment = buildParagraphProperties(modifiedAttributes);
   paragraphFragment.import(paragraphPropertiesFragment);
+
   if (isVNode(vNode) && vNodeHasChildren(vNode)) {
     if (
       [
@@ -966,13 +1007,14 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
         paragraphFragment.import(runOrHyperlinkFragments);
       }
     } else if (vNode.tagName === 'blockquote') {
-      const runFragmentOrFragments = await buildRun(vNode, attributes);
-      if (Array.isArray(runFragmentOrFragments)) {
-        for (let index = 0; index < runFragmentOrFragments.length; index++) {
-          paragraphFragment.import(runFragmentOrFragments[index]);
+      const runFragments = await buildRunOrRuns(vNode, modifiedAttributes, docxDocumentInstance);
+      if (Array.isArray(runFragments)) {
+        for (let index = 0; index < runFragments.length; index++) {
+          const runFragment = runFragments[index];
+          paragraphFragment.import(runFragment);
         }
       } else {
-        paragraphFragment.import(runFragmentOrFragments);
+        paragraphFragment.import(runFragments);
       }
     } else {
       for (let index = 0; index < vNode.children.length; index++) {
@@ -1074,6 +1116,13 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
       paragraphFragment.import(runFragments);
     }
   }
+  paragraphFragment.up();
+
+  if (modifiedAttributes.marginBottom) {
+    const spacingFragment = buildSpacing(null, null, modifiedAttributes.marginBottom);
+    paragraphPropertiesFragment.import(spacingFragment);
+  }
+
   paragraphFragment.up();
 
   return paragraphFragment;
@@ -1374,13 +1423,19 @@ const buildTableCell = async (vNode, attributes, rowSpanMap, columnIndex, docxDo
           await buildList(childVNode, docxDocumentInstance, tableCellFragment);
         }
       } else {
-        const paragraphFragment = await buildParagraph(
+        const paragraphFragments = await buildParagraph(
           childVNode,
           modifiedAttributes,
           docxDocumentInstance
         );
-
-        tableCellFragment.import(paragraphFragment);
+        if (Array.isArray(paragraphFragments)) {
+          paragraphFragments.forEach((frag) => {
+            // Import each fragment into your document
+            tableCellFragment.import(frag);
+          });
+        } else {
+          tableCellFragment.import(paragraphFragments);
+        }
       }
     }
   } else {
