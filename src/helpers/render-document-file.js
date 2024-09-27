@@ -18,6 +18,8 @@ import namespaces from '../namespaces';
 import { imageType, internalRelationship } from '../constants';
 import { vNodeHasChildren } from '../utils/vnode';
 import { isValidUrl } from '../utils/url';
+// eslint-disable-next-line import/no-cycle
+import { buildTableRow } from './xml-builder';
 
 const convertHTML = HTMLToVDOM({
   VNode,
@@ -179,21 +181,125 @@ export const buildList = async (vNode, docxDocumentInstance, xmlFragment) => {
   return listElements;
 };
 
+export async function convertVTreeToXML(docxDocumentInstance, vTree, xmlFragment) {
+  if (!vTree) return xmlFragment;
+  if (Array.isArray(vTree) && vTree.length) {
+    // eslint-disable-next-line no-restricted-syntax
+    for (const vNode of vTree) {
+      await convertVTreeToXML(docxDocumentInstance, vNode, xmlFragment);
+    }
+  } else if (isVNode(vTree)) {
+    if (
+      vTree.properties &&
+      vTree.properties.attributes &&
+      vTree.properties.attributes['data-docx-column-group']
+    ) {
+      // Handle columns
+      const columns = vTree.children.filter(
+        (child) =>
+          child.properties &&
+          child.properties.attributes &&
+          child.properties.attributes['data-docx-column']
+      );
+      if (columns.length > 0) {
+        const tableFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('w:tbl');
+
+        // Set parent table properties
+        const tablePropertiesFragment = fragment({ namespaceAlias: { w: namespaces.w } })
+          .ele('w:tblPr')
+          .ele('w:tblW')
+          .att('w:w', '5000')
+          .att('w:type', 'pct')
+          .up()
+          .ele('w:jc')
+          .att('w:val', 'left')
+          .up()
+          .ele('w:tblInd')
+          .att('w:w', '0')
+          .att('w:type', 'dxa')
+          .up()
+          .ele('w:tblLayout')
+          .att('w:type', 'fixed')
+          .up()
+          .ele('w:tblCellMar')
+          .ele('w:top')
+          .att('w:w', '0')
+          .att('w:type', 'dxa')
+          .up()
+          .ele('w:left')
+          .att('w:w', '100')
+          .att('w:type', 'dxa')
+          .up()
+          .ele('w:bottom')
+          .att('w:w', '0')
+          .att('w:type', 'dxa')
+          .up()
+          .ele('w:right')
+          .att('w:w', '100')
+          .att('w:type', 'dxa')
+          .up()
+          .up();
+
+        tableFragment.import(tablePropertiesFragment);
+
+        // Add colgroup based on columns
+        const tableGridFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele(
+          'w:tblGrid'
+        );
+        columns.forEach((column) => {
+          const colWidth = parseInt(column.properties.attributes['data-docx-column'], 10) || 1;
+          const colWidthTwips = Math.floor(
+            (colWidth / 12) * docxDocumentInstance.availableDocumentSpace
+          );
+          tableGridFragment.ele('w:gridCol').att('w:w', colWidthTwips).up();
+        });
+        tableGridFragment.up();
+
+        tableFragment.import(tableGridFragment);
+
+        // Create the table row and cells for the columns
+        const tableRowFragment = await buildTableRow(docxDocumentInstance, columns);
+        tableFragment.import(tableRowFragment);
+
+        tableFragment.up();
+        xmlFragment.import(tableFragment);
+        // eslint-disable-next-line consistent-return
+        return;
+      }
+    }
+    // eslint-disable-next-line no-use-before-define
+    await findXMLEquivalent(docxDocumentInstance, vTree, xmlFragment);
+  } else if (isVText(vTree)) {
+    const paragraphFragment = await xmlBuilder.buildParagraph(vTree, {}, docxDocumentInstance);
+    xmlFragment.import(paragraphFragment);
+  }
+  return xmlFragment;
+}
+
 async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
+  if (
+    isVNode(vNode) &&
+    vNode.tagName === 'div' &&
+    vNode.properties &&
+    vNode.properties.attributes &&
+    vNode.properties.attributes['data-docx-column']
+  ) {
+    return; // Handled in parent function to convert columns
+  }
+
   if (
     vNode.tagName === 'div' &&
     (vNode.properties.attributes.class === 'page-break' ||
       (vNode.properties.style && vNode.properties.style['page-break-after']))
   ) {
     const paragraphFragment = fragment({ namespaceAlias: { w: namespaces.w } })
-      .ele('@w', 'p')
-      .ele('@w', 'r')
-      .ele('@w', 'br')
-      .att('@w', 'type', 'page')
+      .ele('w:p')
+      .ele('w:r')
+      .ele('w:br')
+      .att('w:type', 'page')
       .up()
       .up()
       .up();
-
     xmlFragment.import(paragraphFragment);
     return;
   }
@@ -207,13 +313,12 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     case 'h6':
       const headingFragment = await xmlBuilder.buildParagraph(
         vNode,
-        {
-          paragraphStyle: `Heading${vNode.tagName[1]}`,
-        },
+        { paragraphStyle: `Heading${vNode.tagName[1]}` },
         docxDocumentInstance
       );
       xmlFragment.import(headingFragment);
       return;
+
     case 'span':
     case 'strong':
     case 'b':
@@ -235,11 +340,11 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
       const paragraphFragment = await xmlBuilder.buildParagraph(vNode, {}, docxDocumentInstance);
       xmlFragment.import(paragraphFragment);
       return;
+
     case 'figure':
       if (vNodeHasChildren(vNode)) {
-        // eslint-disable-next-line no-plusplus
-        for (let index = 0; index < vNode.children.length; index++) {
-          const childVNode = vNode.children[index];
+        // eslint-disable-next-line no-restricted-syntax
+        for (const childVNode of vNode.children) {
           if (childVNode.tagName === 'table') {
             const tableFragment = await xmlBuilder.buildTable(
               childVNode,
@@ -250,7 +355,6 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
               docxDocumentInstance
             );
             xmlFragment.import(tableFragment);
-            // Adding empty paragraph for space after table
             const emptyParagraphFragment = await xmlBuilder.buildParagraph(null, {});
             xmlFragment.import(emptyParagraphFragment);
           } else if (childVNode.tagName === 'img') {
@@ -262,6 +366,7 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
         }
       }
       return;
+
     case 'table':
       const tableFragment = await xmlBuilder.buildTable(
         vNode,
@@ -272,56 +377,38 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
         docxDocumentInstance
       );
       xmlFragment.import(tableFragment);
-      // Adding empty paragraph for space after table
-      const emptyParagraphFragment = await xmlBuilder.buildParagraph(null, {});
-      xmlFragment.import(emptyParagraphFragment);
+      const emptyParaFragment = await xmlBuilder.buildParagraph(null, {});
+      xmlFragment.import(emptyParaFragment);
       return;
-    case 'ol':
+
     case 'ul':
+    case 'ol':
       await buildList(vNode, docxDocumentInstance, xmlFragment);
       return;
+
     case 'img':
       const imageFragment = await buildImage(docxDocumentInstance, vNode);
       if (imageFragment) {
         xmlFragment.import(imageFragment);
       }
       return;
+
     case 'br':
       const linebreakFragment = await xmlBuilder.buildParagraph(null, {});
       xmlFragment.import(linebreakFragment);
       return;
+
     case 'head':
       return;
-  }
-  if (vNodeHasChildren(vNode)) {
-    // eslint-disable-next-line no-plusplus
-    for (let index = 0; index < vNode.children.length; index++) {
-      const childVNode = vNode.children[index];
-      // eslint-disable-next-line no-use-before-define
-      await convertVTreeToXML(docxDocumentInstance, childVNode, xmlFragment);
-    }
-  }
-}
 
-// eslint-disable-next-line consistent-return
-export async function convertVTreeToXML(docxDocumentInstance, vTree, xmlFragment) {
-  if (!vTree) {
-    // eslint-disable-next-line no-useless-return
-    return '';
+    default:
+      if (vNodeHasChildren(vNode)) {
+        // eslint-disable-next-line no-restricted-syntax
+        for (const childVNode of vNode.children) {
+          await convertVTreeToXML(docxDocumentInstance, childVNode, xmlFragment);
+        }
+      }
   }
-  if (Array.isArray(vTree) && vTree.length) {
-    // eslint-disable-next-line no-plusplus
-    for (let index = 0; index < vTree.length; index++) {
-      const vNode = vTree[index];
-      await convertVTreeToXML(docxDocumentInstance, vNode, xmlFragment);
-    }
-  } else if (isVNode(vTree)) {
-    await findXMLEquivalent(docxDocumentInstance, vTree, xmlFragment);
-  } else if (isVText(vTree)) {
-    const paragraphFragment = await xmlBuilder.buildParagraph(vTree, {}, docxDocumentInstance);
-    xmlFragment.import(paragraphFragment);
-  }
-  return xmlFragment;
 }
 
 async function renderDocumentFile(docxDocumentInstance) {

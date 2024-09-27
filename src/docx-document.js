@@ -193,28 +193,21 @@ class DocxDocument {
   }
 
   calculateHeaderHeight() {
-    // Start with the base header height (720 TWIPs = 0.5 inches)
-    let headerHeight = 720;
-
-    // Add height for background image if present
+    let headerHeight = 720; // Base header height (720 TWIPs = 0.5 inches)
     if (this.backgroundImageHeight) {
       headerHeight = Math.max(headerHeight, this.backgroundImageHeight);
     }
 
-    // Add height for logos
     if (this.logoHeights && this.logoHeights.length > 0) {
       const maxLogoHeight = Math.max(...this.logoHeights);
       headerHeight = Math.max(headerHeight, maxLogoHeight);
     }
 
-    // Add height for vTree content
     if (this.vTreeHeight) {
       headerHeight += this.vTreeHeight;
     }
 
-    // Add some padding (e.g., 0.1 inches = 144 TWIPs)
-    headerHeight += 440;
-
+    console.log('headerHeight', headerHeight);
     return headerHeight;
   }
 
@@ -269,6 +262,7 @@ class DocxDocument {
 
       // Find existing sectPr or create a new one
       let sectPr;
+      // eslint-disable-next-line consistent-return
       body.each((child) => {
         if (child.node.nodeName === 'w:sectPr') {
           sectPr = child;
@@ -287,6 +281,7 @@ class DocxDocument {
           pgMar = child;
           return false; // Stop iteration
         }
+        return true; // Continue iteration
       });
 
       if (!pgMar) {
@@ -303,6 +298,7 @@ class DocxDocument {
                 existingChild = sectionChild;
                 return false; // Stop iteration
               }
+              return true;
             });
 
             if (!existingChild) {
@@ -604,10 +600,7 @@ class DocxDocument {
   async generateHeaderXML(vTree, headerConfig) {
     const headerId = this.lastHeaderId + 1;
     this.lastHeaderId = headerId;
-
-    // Convert page width from twips to EMUs (1 twip = 635 EMUs)
     const pageWidthEMU = this.width * 635;
-
     const headerXML = create({
       encoding: 'UTF-8',
       standalone: true,
@@ -627,8 +620,6 @@ class DocxDocument {
     this.backgroundImageHeight = 0;
     this.logoHeights = [];
 
-    this.backgroundImageHeight = 0;
-    this.logoHeights = [];
     let headerHeight = null;
 
     if (headerConfig) {
@@ -641,9 +632,10 @@ class DocxDocument {
         );
         this.backgroundImageHeight = Math.ceil(backgroundHeight / 635); // Convert EMUs to TWIPs
       }
-
       if (headerConfig.logos && Array.isArray(headerConfig.logos)) {
+        // eslint-disable-next-line no-restricted-syntax
         for (const logo of headerConfig.logos) {
+          // eslint-disable-next-line no-await-in-loop
           const logoHeight = await this.addLogo(headerXML, logo, headerId);
           this.logoHeights.push(Math.ceil(logoHeight / 635)); // Convert EMUs to TWIPs
         }
@@ -658,14 +650,15 @@ class DocxDocument {
       await convertVTreeToXML(this, vTree, XMLFragment);
       headerXML.import(XMLFragment);
 
-      // Estimate the height of the vTree content
       this.vTreeHeight = Math.ceil(this.estimateVTreeHeight(XMLFragment) / 635); // Convert EMUs to TWIPs
     }
 
+    // Return headerId, headerXML, and calculated headerHeight
     return { headerId, headerXML, headerHeight };
   }
 
   // Helper method to estimate vTree height
+  // eslint-disable-next-line class-methods-use-this
   estimateVTreeHeight(xmlFragment) {
     // Convert the XML fragment to a string
     const xmlString = xmlFragment.toString();
@@ -678,8 +671,9 @@ class DocxDocument {
     return Math.max(estimatedHeight, 360000);
   }
 
+  // eslint-disable-next-line consistent-return
   async addBackgroundImage(headerXML, backgroundImage, headerId, pageWidthEMU) {
-    const { url, width, height } = backgroundImage;
+    const { url } = backgroundImage;
     try {
       const { base64String, imageWidth, imageHeight } = await this.fetchImageAndGetDimensions(url);
       const imageFile = this.createMediaFile(base64String);
@@ -698,7 +692,6 @@ class DocxDocument {
       // Calculate the height while maintaining aspect ratio
       const aspectRatio = imageWidth / imageHeight;
       const imageHeightEMU = Math.round(pageWidthEMU / aspectRatio);
-
       headerXML
         .ele('@w', 'p')
         .ele('@w', 'pPr')
@@ -801,6 +794,8 @@ class DocxDocument {
         .up()
         .up()
         .up();
+
+      return imageHeightEMU;
     } catch (error) {
       console.error('Error processing background image:', error);
     }
@@ -810,8 +805,7 @@ class DocxDocument {
     const { url, width, height, alignment } = logo;
 
     try {
-      const { base64String, imageWidth, imageHeight, mimeType } =
-        await this.fetchImageAndGetDimensions(url);
+      const { base64String, imageWidth, imageHeight } = await this.fetchImageAndGetDimensions(url);
       const imageFile = this.createMediaFile(base64String);
       const imageRelationshipId = this.createDocumentRelationships(
         `header${headerId}`,
@@ -998,6 +992,7 @@ class DocxDocument {
     // First, try to get dimensions from viewBox
     const viewBoxMatch = svgString.match(/viewBox="([^"]+)"/);
     if (viewBoxMatch) {
+      // eslint-disable-next-line no-unused-vars
       const [minX, minY, width, height] = viewBoxMatch[1].split(/\s+/).map(Number);
       return { width, height };
     }
@@ -1016,6 +1011,7 @@ class DocxDocument {
     return { width, height };
   }
 
+  // eslint-disable-next-line class-methods-use-this
   parseLength(length) {
     if (typeof length === 'number') return length;
 

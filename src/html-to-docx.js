@@ -20,14 +20,11 @@ import {
 } from './utils/unit-conversion';
 import {
   defaultDocumentOptions,
-  defaultHTMLString,
   relsFolderName,
   headerFileName,
-  footerFileName,
   themeFileName,
   documentFileName,
   headerType,
-  footerType,
   internalRelationship,
   wordFolder,
   themeFolder,
@@ -122,20 +119,22 @@ async function addFilesToContainer(
 
   if (documentOptions.header && !headerHTMLString) {
     // eslint-disable-next-line no-param-reassign
-    headerHTMLString = defaultHTMLString;
+    headerHTMLString = '';
   }
   if (documentOptions.footer && !footerHTMLString) {
     // eslint-disable-next-line no-param-reassign
-    footerHTMLString = defaultHTMLString;
+    footerHTMLString = '';
   }
   if (documentOptions.decodeUnicode) {
-    headerHTMLString = decode(headerHTMLString); // eslint-disable-line no-param-reassign
-    htmlString = decode(htmlString); // eslint-disable-line no-param-reassign
-    footerHTMLString = decode(footerHTMLString); // eslint-disable-line no-param-reassign
+    // eslint-disable-next-line no-param-reassign
+    headerHTMLString = decode(headerHTMLString);
+    // eslint-disable-next-line no-param-reassign
+    htmlString = decode(htmlString);
+    // eslint-disable-next-line no-param-reassign
+    footerHTMLString = decode(footerHTMLString);
   }
-
   const docxDocument = new DocxDocument({ zip, htmlString, ...documentOptions });
-  // Conversion to Word XML happens here
+
   docxDocument.documentXML = await renderDocumentFile(docxDocument);
 
   zip
@@ -145,27 +144,23 @@ async function addFilesToContainer(
       create({ encoding: 'UTF-8', standalone: true }, relsXML).toString({ prettyPrint: true }),
       { createFolders: false }
     );
-
-  zip.folder('docProps').file('core.xml', docxDocument.generateCoreXML(), {
-    createFolders: false,
-  });
+  zip.folder('docProps').file('core.xml', docxDocument.generateCoreXML(), { createFolders: false });
 
   if (docxDocument.header && (headerHTMLString || headerConfig)) {
     const vTree = headerHTMLString ? convertHTML(headerHTMLString) : null;
-
     docxDocument.relationshipFilename = headerFileName;
     const { headerId, headerXML, headerHeight } = await docxDocument.generateHeaderXML(
       vTree,
       headerConfig
     );
+
     if (headerHeight !== null) {
-      docxDocument.margins.header = docxDocument.margins.top || '720';
-      docxDocument.margins.top =
-        parseInt(docxDocument.margins.top, 10) + parseInt(headerHeight, 10) + 200;
+      docxDocument.margins.header = 300;
+      docxDocument.margins.top = Math.max(headerHeight + 360, docxDocument.margins.top);
     }
+
     docxDocument.relationshipFilename = documentFileName;
     const fileNameWithExt = `${headerType}${headerId}.xml`;
-
     const relationshipId = docxDocument.createDocumentRelationships(
       docxDocument.relationshipFilename,
       headerType,
@@ -173,34 +168,14 @@ async function addFilesToContainer(
       internalRelationship
     );
 
-    zip.folder(wordFolder).file(fileNameWithExt, headerXML.toString({ prettyPrint: true }), {
-      createFolders: false,
-    });
-
+    zip
+      .folder(wordFolder)
+      .file(fileNameWithExt, headerXML.toString({ prettyPrint: true }), { createFolders: false });
     docxDocument.headerObjects.push({ headerId, relationshipId, type: docxDocument.headerType });
   }
 
-  if (docxDocument.footer && footerHTMLString) {
-    const vTree = convertHTML(footerHTMLString);
+  // Handle footer in similar way
 
-    docxDocument.relationshipFilename = footerFileName;
-    const { footerId, footerXML } = await docxDocument.generateFooterXML(vTree);
-    docxDocument.relationshipFilename = documentFileName;
-    const fileNameWithExt = `${footerType}${footerId}.xml`;
-
-    const relationshipId = docxDocument.createDocumentRelationships(
-      docxDocument.relationshipFilename,
-      footerType,
-      fileNameWithExt,
-      internalRelationship
-    );
-
-    zip.folder(wordFolder).file(fileNameWithExt, footerXML.toString({ prettyPrint: true }), {
-      createFolders: false,
-    });
-
-    docxDocument.footerObjects.push({ footerId, relationshipId, type: docxDocument.footerType });
-  }
   const themeFileNameWithExt = `${themeFileName}.xml`;
   docxDocument.createDocumentRelationships(
     docxDocument.relationshipFilename,
@@ -208,12 +183,11 @@ async function addFilesToContainer(
     `${themeFolder}/${themeFileNameWithExt}`,
     internalRelationship
   );
+
   zip
     .folder(wordFolder)
     .folder(themeFolder)
-    .file(themeFileNameWithExt, docxDocument.generateThemeXML(), {
-      createFolders: false,
-    });
+    .file(themeFileNameWithExt, docxDocument.generateThemeXML(), { createFolders: false });
 
   zip
     .folder(wordFolder)
@@ -227,9 +201,10 @@ async function addFilesToContainer(
   const relationshipXMLs = docxDocument.generateRelsXML();
   if (relationshipXMLs && Array.isArray(relationshipXMLs)) {
     relationshipXMLs.forEach(({ fileName, xmlString }) => {
-      zip.folder(wordFolder).folder(relsFolderName).file(`${fileName}.xml.rels`, xmlString, {
-        createFolders: false,
-      });
+      zip
+        .folder(wordFolder)
+        .folder(relsFolderName)
+        .file(`${fileName}.xml.rels`, xmlString, { createFolders: false });
     });
   }
 
