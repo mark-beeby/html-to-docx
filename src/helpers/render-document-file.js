@@ -252,6 +252,12 @@ export async function convertVTreeToXML(docxDocumentInstance, vTree, xmlFragment
             (colWidth / 12) * docxDocumentInstance.availableDocumentSpace
           );
           tableGridFragment.ele('w:gridCol').att('w:w', colWidthTwips).up();
+          // We want to align top these columns to help it behave like the HTML equivalent, as
+          // when it's a normal table the default behaviour would be middle.
+          // eslint-disable-next-line no-param-reassign
+          column.properties.attributes = column.properties.attributes || {};
+          // eslint-disable-next-line no-param-reassign
+          column.properties.attributes.valign = 'top';
         });
         tableGridFragment.up();
 

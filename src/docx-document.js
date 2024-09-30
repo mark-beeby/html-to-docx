@@ -207,7 +207,6 @@ class DocxDocument {
       headerHeight += this.vTreeHeight;
     }
 
-    console.log('headerHeight', headerHeight);
     return headerHeight;
   }
 

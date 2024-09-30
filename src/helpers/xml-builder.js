@@ -1185,23 +1185,83 @@ async function resizeNestedTable(vNode, parentColumnWidth, docxDocumentInstance)
   return tableFragment;
 }
 
-const buildTableRow = async function buildTableRow(docxDocumentInstance, columns) {
+const buildTableRow = async function buildTableRow(docxDocumentInstance, columns, attributes = {}) {
   const tableRowFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('w:tr');
 
   // eslint-disable-next-line no-restricted-syntax
   for (const column of columns) {
     const colWidth = parseInt(column.properties.attributes['data-docx-column'] || '1', 10);
-    const colWidthTwips = Math.floor((colWidth / 12) * docxDocumentInstance.availableDocumentSpace);
+    const totalPadding = columns.length * 200;
+    const colWidthTwips =
+      Math.floor((colWidth / 12) * docxDocumentInstance.availableDocumentSpace) - totalPadding;
     const tableCellFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('w:tc');
+    const vAlign = column.properties?.attributes?.valign;
+    const cssVAlign = column.properties?.style?.['vertical-align'];
+
+    const valignMapping = {
+      top: 'top',
+      middle: 'center',
+      bottom: 'bottom',
+      baseline: 'top', // No direct equivalent, typically treated as 'top'
+    };
+
+    const cssVerticalAlignMapping = {
+      baseline: 'bottom', // No direct equivalent, typically treated as 'bottom'
+      sub: 'bottom', // No direct equivalent, typically treated as 'bottom'
+      super: 'top', // No direct equivalent, typically treated as 'top'
+      'text-top': 'top',
+      'text-bottom': 'bottom',
+      middle: 'center',
+      top: 'top',
+      bottom: 'bottom',
+      center: 'center',
+    };
+
+    // eslint-disable-next-line no-nested-ternary
+    const cssOrValignAlignment = cssVAlign
+      ? cssVerticalAlignMapping[cssVAlign] || 'center'
+      : vAlign
+      ? valignMapping[vAlign] || 'center'
+      : 'center';
 
     // Set up column width
     tableCellFragment
       .ele('w:tcPr')
       .ele('w:tcW')
-      .att('w:w', colWidthTwips)
+      .att('w:w', colWidthTwips.toString())
       .att('w:type', 'dxa')
       .up()
+      .ele('w:vAlign')
+      .att('w:val', cssOrValignAlignment)
+      .up()
+      .ele('w:tcMar')
+      .ele('w:top')
+      .att('w:w', '100')
+      .att('w:type', 'dxa')
+      .up()
+      .ele('w:left')
+      .att('w:w', '100')
+      .att('w:type', 'dxa')
+      .up()
+      .ele('w:bottom')
+      .att('w:w', '100')
+      .att('w:type', 'dxa')
+      .up()
+      .ele('w:right')
+      .att('w:w', '100')
+      .att('w:type', 'dxa')
       .up();
+
+    if (attributes.backgroundColor) {
+      tableCellFragment
+        .first()
+        .ele('w:shd')
+        .att('w:val', 'clear')
+        .att('w:fill', attributes.backgroundColor.toUpperCase())
+        .up();
+    }
+
+    tableCellFragment.up();
 
     // Import cell content
     await convertVTreeToXML(docxDocumentInstance, column.children, tableCellFragment);
@@ -1259,8 +1319,9 @@ const buildTableProperties = (attributes) => {
     .ele('w:right')
     .att('w:w', '0')
     .att('w:type', 'dxa')
+    .up()
     .up();
-  tablePropertiesFragment.up();
+
   return tablePropertiesFragment;
 };
 
@@ -1359,6 +1420,20 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
     let maximumWidth;
     let width;
 
+    if (tableStyles['background-color']) {
+      let backgroundColor = tableStyles['background-color'];
+      // Convert RGB to hex if necessary
+      if (backgroundColor.startsWith('rgb')) {
+        const rgb = backgroundColor.match(/\d+/g);
+        if (rgb && rgb.length === 3) {
+          backgroundColor = rgbToHex(parseInt(rgb[0]), parseInt(rgb[1]), parseInt(rgb[2]));
+        }
+      }
+      // Remove '#' if present
+      backgroundColor = backgroundColor.replace('#', '');
+      modifiedAttributes.backgroundColor = backgroundColor;
+    }
+
     if (tableStyles['min-width']) {
       if (pixelRegex.test(tableStyles['min-width'])) {
         minimumWidth = pixelToTWIP(tableStyles['min-width'].match(pixelRegex)[1]);
@@ -1404,6 +1479,33 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
     if (modifiedAttributes.width) {
       modifiedAttributes.width = Math.min(modifiedAttributes.width, attributes.maximumWidth);
     }
+  }
+
+  // Count the number of columns
+  let columnCount = 0;
+  if (vNodeHasChildren(vNode)) {
+    const firstRow = vNode.children.find(
+      (child) =>
+        child.tagName === 'tr' ||
+        (child.tagName === 'thead' &&
+          child.children.find((grandChild) => grandChild.tagName === 'tr')) ||
+        (child.tagName === 'tbody' &&
+          child.children.find((grandChild) => grandChild.tagName === 'tr'))
+    );
+
+    if (firstRow) {
+      const cells =
+        firstRow.tagName === 'tr'
+          ? firstRow.children
+          : firstRow.children.find((child) => child.tagName === 'tr').children;
+      columnCount = cells.filter((cell) => cell.tagName === 'td' || cell.tagName === 'th').length;
+    }
+  }
+
+  const paddingPerCell = 1000; // 100 twips left + 100 twips right
+  const totalPadding = columnCount * paddingPerCell;
+  if (modifiedAttributes.width) {
+    modifiedAttributes.width = Math.max(modifiedAttributes.width - totalPadding, 0);
   }
 
   const tablePropertiesFragment = buildTableProperties(modifiedAttributes);

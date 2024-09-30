@@ -188,7 +188,7 @@ async function addFilesToContainer(
     .folder(wordFolder)
     .folder(themeFolder)
     .file(themeFileNameWithExt, docxDocument.generateThemeXML(), { createFolders: false });
-
+  // require('fs').writeFileSync(`document.xml`, docxDocument.generateDocumentXML());
   zip
     .folder(wordFolder)
     .file('document.xml', docxDocument.generateDocumentXML(), { createFolders: false })
