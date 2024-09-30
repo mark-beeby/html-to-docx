@@ -207,6 +207,8 @@ class DocxDocument {
       headerHeight += this.vTreeHeight;
     }
 
+    headerHeight += 240;
+
     return headerHeight;
   }
 
