@@ -675,14 +675,14 @@ const buildNumberingInstances = () =>
 const buildSpacing = (lineSpacing, beforeSpacing, afterSpacing) => {
   const spacingFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'spacing');
 
-  if (lineSpacing) {
+  if (lineSpacing || lineSpacing === 0) {
     spacingFragment.att('@w', 'line', lineSpacing);
     spacingFragment.att('@w', 'lineRule', 'auto');
   }
-  if (beforeSpacing) {
+  if (beforeSpacing || beforeSpacing === 0) {
     spacingFragment.att('@w', 'before', beforeSpacing);
   }
-  if (afterSpacing) {
+  if (afterSpacing || afterSpacing === 0) {
     spacingFragment.att('@w', 'after', afterSpacing);
   }
 
@@ -811,6 +811,10 @@ const buildParagraphProperties = (attributes) => {
       // eslint-disable-next-line no-param-reassign
       delete attributes.afterSpacing;
       paragraphPropertiesFragment.import(spacingFragment);
+    } else {
+      // but to prevent additional spacing unwanted.
+      const spacingAfterFragment = buildSpacing(0, 0, 0);
+      paragraphPropertiesFragment.import(spacingAfterFragment);
     }
   }
   paragraphPropertiesFragment.up();
@@ -1197,7 +1201,19 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
     const tableCellFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('w:tc');
     const vAlign = column.properties?.attributes?.valign;
     const cssVAlign = column.properties?.style?.['vertical-align'];
+    let cellBgOverride = column.properties?.style?.['background-color'] || false;
 
+    if (cellBgOverride) {
+      // Convert RGB to hex if necessary
+      if (cellBgOverride.startsWith('rgb')) {
+        const rgb = cellBgOverride.match(/\d+/g);
+        if (rgb && rgb.length === 3) {
+          cellBgOverride = rgbToHex(parseInt(rgb[0]), parseInt(rgb[1]), parseInt(rgb[2]));
+        }
+      }
+      // Remove '#' if present
+      cellBgOverride = cellBgOverride.replace('#', '');
+    }
     const valignMapping = {
       top: 'top',
       middle: 'center',
@@ -1252,12 +1268,12 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
       .att('w:type', 'dxa')
       .up();
 
-    if (attributes.backgroundColor) {
+    if (cellBgOverride || attributes.backgroundColor) {
       tableCellFragment
         .first()
         .ele('w:shd')
         .att('w:val', 'clear')
-        .att('w:fill', attributes.backgroundColor.toUpperCase())
+        .att('w:fill', cellBgOverride.toUpperCase() || attributes.backgroundColor.toUpperCase())
         .up();
     }
 
