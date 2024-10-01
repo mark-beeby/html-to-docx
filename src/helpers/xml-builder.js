@@ -1269,11 +1269,12 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
       .up();
 
     if (cellBgOverride || attributes.backgroundColor) {
+      const bgColour = cellBgOverride || attributes.backgroundColor;
       tableCellFragment
         .first()
         .ele('w:shd')
         .att('w:val', 'clear')
-        .att('w:fill', cellBgOverride.toUpperCase() || attributes.backgroundColor.toUpperCase())
+        .att('w:fill', bgColour.toUpperCase())
         .up();
     }
 
