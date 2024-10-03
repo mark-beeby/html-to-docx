@@ -56,6 +56,36 @@ import {
 import { vNodeHasChildren } from '../utils/vnode';
 import { isValidUrl } from '../utils/url';
 
+const valignMapping = {
+  top: 'top',
+  middle: 'center',
+  bottom: 'bottom',
+  baseline: 'top', // No direct equivalent, typically treated as 'top'
+};
+
+const cssVerticalAlignMapping = {
+  baseline: 'bottom', // No direct equivalent, typically treated as 'bottom'
+  sub: 'bottom', // No direct equivalent, typically treated as 'bottom'
+  super: 'top', // No direct equivalent, typically treated as 'top'
+  'text-top': 'top',
+  'text-bottom': 'bottom',
+  middle: 'center',
+  top: 'top',
+  bottom: 'bottom',
+  center: 'center',
+};
+
+const halignMapping = {
+  left: 'left',
+  center: 'center',
+  right: 'right',
+  justify: 'both',
+  start: 'left',
+  end: 'right',
+  'justify-all': 'both',
+  inherit: null,
+};
+
 // eslint-disable-next-line consistent-return
 const fixupColorCode = (colorCodeString) => {
   if (Object.prototype.hasOwnProperty.call(colorNames, colorCodeString.toLowerCase())) {
@@ -274,7 +304,7 @@ const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes,
       style['text-align'] &&
       ['left', 'right', 'center', 'justify'].includes(style['text-align'])
     ) {
-      modifiedAttributes.textAlign = style['text-align'].toUpperCase();
+      modifiedAttributes.textAlign = style['text-align'];
     }
     if (style['font-weight'] && style['font-weight'] === 'bold') {
       modifiedAttributes.strong = style['font-weight'];
@@ -721,6 +751,12 @@ const buildHorizontalAlignment = (horizontalAlignment) => {
   return fragment({ namespaceAlias: { w: namespaces.w } })
     .ele('@w', 'jc')
     .att('@w', 'val', horizontalAlignment)
+    .up()
+    .ele('w:spacing')
+    .att('w:line', '0')
+    .att('w:lineRule', 'auto')
+    .att('w:before', '0')
+    .att('w:after', '0')
     .up();
 };
 
@@ -1199,6 +1235,7 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
     const colWidthTwips =
       Math.floor((colWidth / 12) * docxDocumentInstance.availableDocumentSpace) - totalPadding;
     const tableCellFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('w:tc');
+    const align = column.properties?.style?.['text-align'];
     const vAlign = column.properties?.attributes?.valign;
     const cssVAlign = column.properties?.style?.['vertical-align'];
     let cellBgOverride = column.properties?.style?.['background-color'] || false;
@@ -1214,24 +1251,6 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
       // Remove '#' if present
       cellBgOverride = cellBgOverride.replace('#', '');
     }
-    const valignMapping = {
-      top: 'top',
-      middle: 'center',
-      bottom: 'bottom',
-      baseline: 'top', // No direct equivalent, typically treated as 'top'
-    };
-
-    const cssVerticalAlignMapping = {
-      baseline: 'bottom', // No direct equivalent, typically treated as 'bottom'
-      sub: 'bottom', // No direct equivalent, typically treated as 'bottom'
-      super: 'top', // No direct equivalent, typically treated as 'top'
-      'text-top': 'top',
-      'text-bottom': 'bottom',
-      middle: 'center',
-      top: 'top',
-      bottom: 'bottom',
-      center: 'center',
-    };
 
     // eslint-disable-next-line no-nested-ternary
     const cssOrValignAlignment = cssVAlign
@@ -1240,6 +1259,15 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
       ? valignMapping[vAlign] || 'center'
       : 'center';
 
+    if (align) {
+      column.children.forEach(child => {
+        if (!child.properties?.style?.['text-align']) {
+          child.properties = child.properties || {};
+          child.properties.style = child.properties.style || {};
+          child.properties.style['text-align'] = column.properties.style['text-align'];
+        }
+      });
+    }
     // Set up column width
     tableCellFragment
       .ele('w:tcPr')
@@ -1575,7 +1603,6 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
               );
               tableFragment.import(tableGridFragment);
             }
-
             const tableRowFragment = await buildTableRow(
               docxDocumentInstance,
               columns,
