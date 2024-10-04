@@ -752,11 +752,11 @@ const buildHorizontalAlignment = (horizontalAlignment) => {
     .ele('@w', 'jc')
     .att('@w', 'val', horizontalAlignment)
     .up()
-    .ele('w:spacing')
-    .att('w:line', '0')
-    .att('w:lineRule', 'auto')
-    .att('w:before', '0')
-    .att('w:after', '0')
+    .ele('@w', 'spacing')
+    .att('@w', 'line', '0')
+    .att('@w', 'lineRule', 'auto')
+    .att('@w', 'before', '0')
+    .att('@w', 'after', '0')
     .up();
 };
 
