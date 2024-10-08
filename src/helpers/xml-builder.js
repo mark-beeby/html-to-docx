@@ -55,6 +55,7 @@ import {
 } from '../constants';
 import { vNodeHasChildren } from '../utils/vnode';
 import { isValidUrl } from '../utils/url';
+import VirtualText from 'virtual-dom/vnode/vtext';
 
 const valignMapping = {
   top: 'top',
@@ -287,6 +288,9 @@ const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes,
 
     if (style['font-family']) {
       modifiedAttributes.font = docxDocumentInstance.createFont(style['font-family']);
+    }
+    if (style['text-decoration']) {
+      modifiedAttributes.underline = true;
     }
     if (style['font-size']) {
       modifiedAttributes.fontSize = fixupFontSize(style['font-size']);
@@ -625,6 +629,13 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
 const buildRunOrRuns = async (vNode, attributes, docxDocumentInstance) => {
   if (isVNode(vNode) && vNode.tagName === 'span') {
     let runFragments = [];
+
+    if (
+      vNode.children.length === 0 &&
+      vNode.properties?.attributes?.['data-force-space'] === 'true'
+    ) {
+      vNode.children.push(new VirtualText(' '));
+    }
 
     for (let index = 0; index < vNode.children.length; index++) {
       const childVNode = vNode.children[index];

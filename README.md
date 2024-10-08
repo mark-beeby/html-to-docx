@@ -131,10 +131,29 @@ Full fledged examples can be found under `example/`
 
 <[Promise]<[Buffer]|[Blob]>>
 
+## Column support
+
+You can introduce columns into the layout using a basic 12 grid structure similar to this:-
+
+```html
+<div data-docx-column-group="true">
+  <div data-docx-column="8">
+    <p>left content</p>
+  </div>
+  <div data-docx-column="4">
+    <p>right column</p>
+  </div>
+</div>
+```
+Native columns within docx are not appropriate for HTML conversion, as they overflow left to
+right, not onto the next page. To achieve a html-like column division tables are used to control
+the layout within the resulting document.
+
 ## Notes
 
 Currently page break can be implemented by having div with classname "page-break" or style "page-break-after" despite the values of the "page-break-after", and contents inside the div element will be ignored. `<div class="page-break" style="page-break-after: always;"></div>`
 
+For spans with space between it is possible to preprocess a span with a data-force-space='true' attribute to reinject that space
 
 CSS list-style-type for `<ol>` element are now supported. Just do something like this in the HTML:
 ```
