@@ -289,8 +289,8 @@ const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes,
     if (style['font-family']) {
       modifiedAttributes.font = docxDocumentInstance.createFont(style['font-family']);
     }
-    if (style['text-decoration']) {
-      modifiedAttributes.underline = true;
+    if (style['text-decoration'] && style['text-decoration'] === 'underline') {
+      modifiedAttributes.u = true;
     }
     if (style['font-size']) {
       modifiedAttributes.fontSize = fixupFontSize(style['font-size']);
