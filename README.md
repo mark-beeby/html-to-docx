@@ -153,7 +153,17 @@ the layout within the resulting document.
 
 Currently page break can be implemented by having div with classname "page-break" or style "page-break-after" despite the values of the "page-break-after", and contents inside the div element will be ignored. `<div class="page-break" style="page-break-after: always;"></div>`
 
-For spans with space between it is possible to preprocess a span with a data-force-space='true' attribute to reinject that space
+Due to a bug when converting the HTML to a vTree, spaces between spans can be lost. 
+For spans with space between it is possible to preprocess a span with a data-force-space='true' 
+attribute to reinject that space like so:-
+
+```html
+<!-- the space between pre and post is lost -->
+<span>pre</span> <span>post</span>
+
+<!-- preprocess your html to force the following -->
+<span>pre</span><span data-force-space="true"> </span><span>post</span>
+```
 
 CSS list-style-type for `<ol>` element are now supported. Just do something like this in the HTML:
 ```
