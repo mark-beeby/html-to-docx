@@ -26,7 +26,7 @@ const generateDocumentTemplate = (width, height, orientation, margins) => `
                         w:left="${margins.left}"
                         w:header="${margins.header}"
                         w:footer="${margins.footer || 720}"
-                        w:gutter="${margins.gutter || 720}"/>
+                        w:gutter="${margins.gutter || 0}"/>
             </w:sectPr>
         </w:body>
     </w:document>
