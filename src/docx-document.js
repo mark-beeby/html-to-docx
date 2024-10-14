@@ -212,6 +212,26 @@ class DocxDocument {
     return headerHeight;
   }
 
+  calculateFooterHeight() {
+    let footerHeight = 720; // Base header height (720 TWIPs = 0.5 inches)
+    if (this.footerImageHeight) {
+      footerHeight = Math.max(footerHeight, this.backgroundImageHeight);
+    }
+
+    if (this.logoHeights && this.logoHeights.length > 0) {
+      const maxLogoHeight = Math.max(...this.logoHeights);
+      footerHeight = Math.max(footerHeight, maxLogoHeight);
+    }
+
+    if (this.vTreeHeight) {
+      footerHeight += this.vTreeHeight;
+    }
+
+    footerHeight += 240;
+
+    return footerHeight;
+  }
+
   generateContentTypesXML() {
     const contentTypesXML = create({ encoding: 'UTF-8', standalone: true }, contentTypesXMLString);
 
@@ -602,6 +622,7 @@ class DocxDocument {
     const headerId = this.lastHeaderId + 1;
     this.lastHeaderId = headerId;
     const pageWidthEMU = this.width * 635;
+    const pageHeightEMU = this.height * 635;
     const headerXML = create({
       encoding: 'UTF-8',
       standalone: true,
@@ -629,7 +650,9 @@ class DocxDocument {
           headerXML,
           headerConfig.backgroundImage,
           headerId,
-          pageWidthEMU
+          pageWidthEMU,
+          pageHeightEMU,
+          'header'
         );
         this.backgroundImageHeight = Math.ceil(backgroundHeight / 635); // Convert EMUs to TWIPs
       }
@@ -658,6 +681,69 @@ class DocxDocument {
     return { headerId, headerXML, headerHeight };
   }
 
+  async generateFooterXML(vTree, footerConfig) {
+    const footerId = this.lastFooterId + 1;
+    this.lastFooterId = footerId;
+    const pageWidthEMU = this.width * 635;
+    const pageHeightEMU = this.height * 635;
+    const footerXML = create({
+      encoding: 'UTF-8',
+      standalone: true,
+      namespaceAlias: {
+        w: namespaces.w,
+        r: namespaces.r,
+        wp: namespaces.wp,
+        a: namespaces.a,
+        pic: namespaces.pic,
+        ve: namespaces.ve,
+        o: namespaces.o,
+        v: namespaces.v,
+        w10: namespaces.w10,
+      },
+    }).ele('@w', 'ftr');
+
+    this.backgroundImageHeight = 0;
+    this.logoHeights = [];
+
+    let footerHeight = null;
+
+    if (footerConfig) {
+      if (footerConfig.backgroundImage) {
+        const backgroundHeight = await this.addBackgroundImage(
+          footerXML,
+          footerConfig.backgroundImage,
+          footerId,
+          pageWidthEMU,
+          pageHeightEMU,
+          'footer'
+        );
+        this.backgroundImageHeight = Math.ceil(backgroundHeight / 635); // Convert EMUs to TWIPs
+      }
+      if (footerConfig.logos && Array.isArray(footerConfig.logos)) {
+        // eslint-disable-next-line no-restricted-syntax
+        for (const logo of footerConfig.logos) {
+          // eslint-disable-next-line no-await-in-loop
+          const logoHeight = await this.addLogo(footerXML, logo, footerId);
+          this.logoHeights.push(Math.ceil(logoHeight / 635)); // Convert EMUs to TWIPs
+        }
+      }
+
+      // Calculate the footer height
+      footerHeight = this.calculateFooterHeight();
+    }
+
+    if (vTree) {
+      const XMLFragment = fragment();
+      await convertVTreeToXML(this, vTree, XMLFragment);
+      footerXML.import(XMLFragment);
+
+      this.vTreeHeight = Math.ceil(this.estimateVTreeHeight(XMLFragment) / 635); // Convert EMUs to TWIPs
+    }
+
+    // Return footerId, footerXML, and calculated footerHeight
+    return { footerId, footerXML, footerHeight };
+  }
+
   // Helper method to estimate vTree height
   // eslint-disable-next-line class-methods-use-this
   estimateVTreeHeight(xmlFragment) {
@@ -673,18 +759,26 @@ class DocxDocument {
   }
 
   // eslint-disable-next-line consistent-return
-  async addBackgroundImage(headerXML, backgroundImage, headerId, pageWidthEMU) {
+  async addBackgroundImage(
+    XML,
+    backgroundImage,
+    uniqId,
+    pageWidthEMU,
+    pageHeightEMU,
+    type = 'header'
+  ) {
+    const relationshipType = type === 'header' ? `header${uniqId}` : `footer${uniqId}`;
+    const styleVal = type === 'header' ? 'Header' : 'Footer';
     const { url } = backgroundImage;
     try {
       const { base64String, imageWidth, imageHeight } = await this.fetchImageAndGetDimensions(url);
       const imageFile = this.createMediaFile(base64String);
       const imageRelationshipId = this.createDocumentRelationships(
-        `header${headerId}`,
+        relationshipType,
         imageType,
         `media/${imageFile.fileNameWithExtension}`,
         'Internal'
       );
-
       // Add the image file to the zip
       this.zip
         .folder('word/media')
@@ -693,11 +787,10 @@ class DocxDocument {
       // Calculate the height while maintaining aspect ratio
       const aspectRatio = imageWidth / imageHeight;
       const imageHeightEMU = Math.round(pageWidthEMU / aspectRatio);
-      headerXML
-        .ele('@w', 'p')
+      XML.ele('@w', 'p')
         .ele('@w', 'pPr')
         .ele('@w', 'pStyle')
-        .att('@w', 'val', 'Header')
+        .att('@w', 'val', styleVal)
         .up()
         .up()
         .ele('@w', 'r')
@@ -726,7 +819,7 @@ class DocxDocument {
         .ele('@wp', 'positionV')
         .att('relativeFrom', 'page')
         .ele('@wp', 'posOffset')
-        .txt('0')
+        .txt(type === 'header' ? '0' : (pageHeightEMU - imageHeightEMU).toString())
         .up()
         .up()
         .ele('@wp', 'extent')
@@ -798,7 +891,7 @@ class DocxDocument {
 
       return imageHeightEMU;
     } catch (error) {
-      console.error('Error processing background image:', error);
+      console.error(`Error processing background image for ${type}:`, error);
     }
   }
 
@@ -1043,10 +1136,6 @@ class DocxDocument {
       .folder('word/media')
       .file(imageFile.fileNameWithExtension, imageFile.fileContent, { base64: true });
     return imageFile;
-  }
-
-  generateFooterXML(vTree) {
-    return this.generateSectionXML(vTree, 'footer');
   }
 }
 

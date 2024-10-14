@@ -126,6 +126,16 @@ Full fledged examples can be found under `example/`
     - `width` <[String]> width of the logo (e.g., '50px'). 
     - `height` <[String]> height of the logo (e.g., '50px'). 
     - `alignment` <"left"|"center"|"right"> alignment of the logo.
+- `footerConfig` <?[Object]> configuration for footer images and logos. 
+  - `backgroundImage` <?[Object]> configuration for the footer background image.
+    - `url` <[String]> URL of the background image.
+    - `width` <[String]> width of the background image (e.g., '100%').
+    - `height` <[String]> height of the background image (e.g., '100px'). 
+  - `logos` <?[Array]<[Object]>> array of logo configurations. 
+    - `url` <[String]> URL of the logo image.
+    - `width` <[String]> width of the logo (e.g., '50px'). 
+    - `height` <[String]> height of the logo (e.g., '50px'). 
+    - `alignment` <"left"|"center"|"right"> alignment of the logo.
 
 ### Returns
 

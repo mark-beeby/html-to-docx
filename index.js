@@ -27,7 +27,8 @@ async function generateContainer(
   headerHTMLString,
   documentOptions = {},
   footerHTMLString,
-  headerConfig
+  headerConfig,
+  footerConfig
 ) {
   const zip = new JSZip();
 
@@ -50,7 +51,8 @@ async function generateContainer(
     documentOptions,
     headerHTML,
     footerHTML,
-    headerConfig
+    headerConfig,
+    footerConfig
   );
 
   const buffer = await zip.generateAsync({ type: 'arraybuffer' });

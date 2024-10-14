@@ -22,9 +22,11 @@ import {
   defaultDocumentOptions,
   relsFolderName,
   headerFileName,
+  footerFileName,
   themeFileName,
   documentFileName,
   headerType,
+  footerType,
   internalRelationship,
   wordFolder,
   themeFolder,
@@ -112,7 +114,8 @@ async function addFilesToContainer(
   suppliedDocumentOptions,
   headerHTMLString,
   footerHTMLString,
-  headerConfig
+  headerConfig,
+  footerConfig
 ) {
   const normalizedDocumentOptions = normalizeDocumentOptions(suppliedDocumentOptions);
   const documentOptions = mergeOptions(defaultDocumentOptions, normalizedDocumentOptions);
@@ -175,6 +178,33 @@ async function addFilesToContainer(
   }
 
   // Handle footer in similar way
+  if (docxDocument.footer && (footerHTMLString || footerConfig)) {
+    const vTree = footerHTMLString ? convertHTML(footerHTMLString) : null;
+    docxDocument.relationshipFilename = footerFileName;
+    const { footerId, footerXML, footerHeight } = await docxDocument.generateFooterXML(
+      vTree,
+      footerConfig
+    );
+
+    if (footerHeight !== null) {
+      docxDocument.margins.footer = 300;
+      docxDocument.margins.bottom = Math.max(footerHeight + 360, docxDocument.margins.bottom);
+    }
+
+    docxDocument.relationshipFilename = documentFileName;
+    const fileNameWithExt = `${footerType}${footerId}.xml`;
+    const relationshipId = docxDocument.createDocumentRelationships(
+      docxDocument.relationshipFilename,
+      footerType,
+      fileNameWithExt,
+      internalRelationship
+    );
+
+    zip
+      .folder(wordFolder)
+      .file(fileNameWithExt, footerXML.toString({ prettyPrint: true }), { createFolders: false });
+    docxDocument.footerObjects.push({ footerId, relationshipId, type: docxDocument.footerType });
+  }
 
   const themeFileNameWithExt = `${themeFileName}.xml`;
   docxDocument.createDocumentRelationships(
