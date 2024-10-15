@@ -292,6 +292,9 @@ const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes,
     if (style['text-decoration'] && style['text-decoration'] === 'underline') {
       modifiedAttributes.u = true;
     }
+    if (style['font-style'] && style['font-style'] === 'italic') {
+      modifiedAttributes.i = true;
+    }
     if (style['font-size']) {
       modifiedAttributes.fontSize = fixupFontSize(style['font-size']);
     }
@@ -526,6 +529,7 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
               tempAttributes.strong = true;
               break;
             case 'i':
+            case 'em':
               tempAttributes.i = true;
               break;
             case 'u':
