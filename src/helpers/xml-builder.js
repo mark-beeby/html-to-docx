@@ -1146,7 +1146,7 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
 };
 
 async function resizeNestedTable(vNode, parentColumnWidth, docxDocumentInstance) {
-  const tableFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('w:tbl');
+  const tableFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tbl');
   if (isVNode(vNode) && vNode.properties) {
     const tableStyles = vNode.properties.style || {};
     const width = parentColumnWidth; // Set width to parent column width if data attribute doesn't exist
@@ -1159,43 +1159,43 @@ async function resizeNestedTable(vNode, parentColumnWidth, docxDocumentInstance)
 
     // Set table properties
     tableFragment
-      .ele('w:tblPr')
-      .ele('w:tblW')
-      .att('w:w', width)
-      .att('w:type', 'pct')
+      .ele('@w', 'tblPr')
+      .ele('@w', 'tblW')
+      .att('@w', 'w', width)
+      .att('@w', 'type', 'pct')
       .up()
-      .ele('w:tblLayout')
-      .att('w:type', 'fixed')
+      .ele('@w', 'tblLayout')
+      .att('@w', 'type', 'fixed')
       .up()
-      .ele('w:tblCellMar')
-      .ele('w:tblInd')
-      .att('w:w', '0')
-      .att('w:type', 'dxa')
+      .ele('@w', 'tblCellMar')
+      .ele('@w', 'tblInd')
+      .att('@w', 'w', '0')
+      .att('@w', 'type', 'dxa')
       .up()
-      .ele('w:test')
-      .att('w:w', '55')
-      .att('w:type', 'dxa')
+      .ele('@w', 'test')
+      .att('@w', 'w', '55')
+      .att('@w', 'type', 'dxa')
       .up()
-      .ele('w:top')
-      .att('w:w', '555')
-      .att('w:type', 'dxa')
+      .ele('@w', 'top')
+      .att('@w', 'w', '555')
+      .att('@w', 'type', 'dxa')
       .up()
-      .ele('w:left')
-      .att('w:w', '11')
-      .att('w:type', 'dxa')
+      .ele('@w', 'left')
+      .att('@w', 'w', '11')
+      .att('@w', 'type', 'dxa')
       .up()
-      .ele('w:bottom')
-      .att('w:w', '0')
-      .att('w:type', 'dxa')
+      .ele('@w', 'bottom')
+      .att('@w', 'w', '0')
+      .att('@w', 'type', 'dxa')
       .up()
-      .ele('w:right')
-      .att('w:w', '0')
-      .att('w:type', 'dxa')
+      .ele('@w', 'right')
+      .att('@w', 'w', '0')
+      .att('@w', 'type', 'dxa')
       .up()
       .up()
       .up();
 
-    const tableGridFragment = tableFragment.ele('w:tblGrid');
+    const tableGridFragment = tableFragment.ele('@w', 'tblGrid');
     // Set column widths
     let colCount = 0;
     vNode.children.forEach((childVNode) => {
@@ -1210,7 +1210,7 @@ async function resizeNestedTable(vNode, parentColumnWidth, docxDocumentInstance)
           } else if (pixelRegex.test(colWidthStr)) {
             colWidth = pixelToTWIP(colWidthStr.match(pixelRegex)[1]);
           }
-          tableGridFragment.ele('w:gridCol').att('w:w', colWidth).up();
+          tableGridFragment.ele('@w', 'gridCol').att('@w', 'w', colWidth).up();
         });
       }
     });
@@ -1241,7 +1241,7 @@ async function resizeNestedTable(vNode, parentColumnWidth, docxDocumentInstance)
 }
 
 const buildTableRow = async function buildTableRow(docxDocumentInstance, columns, attributes = {}) {
-  const tableRowFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('w:tr');
+  const tableRowFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tr');
 
   // eslint-disable-next-line no-restricted-syntax
   for (const column of columns) {
@@ -1249,7 +1249,7 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
     const totalPadding = columns.length * 200;
     const colWidthTwips =
       Math.floor((colWidth / 12) * docxDocumentInstance.availableDocumentSpace) - totalPadding;
-    const tableCellFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('w:tc');
+    const tableCellFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tc');
     const align = column.properties?.style?.['text-align'];
     const vAlign = column.properties?.attributes?.valign;
     const cssVAlign = column.properties?.style?.['vertical-align'];
@@ -1285,39 +1285,39 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
     }
     // Set up column width
     tableCellFragment
-      .ele('w:tcPr')
-      .ele('w:tcW')
-      .att('w:w', colWidthTwips.toString())
-      .att('w:type', 'dxa')
+      .ele('@w', 'tcPr')
+      .ele('@w', 'tcW')
+      .att('@w', 'w', colWidthTwips.toString())
+      .att('@w', 'type', 'dxa')
       .up()
-      .ele('w:vAlign')
-      .att('w:val', cssOrValignAlignment)
+      .ele('@w', 'vAlign')
+      .att('@w', 'val', cssOrValignAlignment)
       .up()
-      .ele('w:tcMar')
-      .ele('w:top')
-      .att('w:w', '100')
-      .att('w:type', 'dxa')
+      .ele('@w', 'tcMar')
+      .ele('@w', 'top')
+      .att('@w', 'w', '100')
+      .att('@w', 'type', 'dxa')
       .up()
-      .ele('w:left')
-      .att('w:w', '100')
-      .att('w:type', 'dxa')
+      .ele('@w', 'left')
+      .att('@w', 'w', '100')
+      .att('@w', 'type', 'dxa')
       .up()
-      .ele('w:bottom')
-      .att('w:w', '100')
-      .att('w:type', 'dxa')
+      .ele('@w', 'bottom')
+      .att('@w', 'w', '100')
+      .att('@w', 'type', 'dxa')
       .up()
-      .ele('w:right')
-      .att('w:w', '100')
-      .att('w:type', 'dxa')
+      .ele('@w', 'right')
+      .att('@w', 'w', '100')
+      .att('@w', 'type', 'dxa')
       .up();
 
     if (cellBgOverride || attributes.backgroundColor) {
       const bgColour = cellBgOverride || attributes.backgroundColor;
       tableCellFragment
         .first()
-        .ele('w:shd')
-        .att('w:val', 'clear')
-        .att('w:fill', bgColour.toUpperCase())
+        .ele('@w', 'shd')
+        .att('@w', 'val', 'clear')
+        .att('@w', 'fill', bgColour.toUpperCase())
         .up();
     }
 
@@ -1347,38 +1347,52 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
   return tableRowFragment;
 };
 
-const buildTableGrid = (tableWidthTwips) => {
-  const tableGridFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('w:tblGrid');
-  tableGridFragment.ele('w:gridCol').att('w:w', tableWidthTwips).up();
+const buildTableGridCol = (gridWidth) =>
+  fragment({ namespaceAlias: { w: namespaces.w } })
+    .ele('@w', 'gridCol')
+    .att('@w', 'w', String(gridWidth));
+
+const buildTableGrid = (vNode, attributes) => {
+  const tableGridFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tblGrid');
+  if (vNodeHasChildren(vNode)) {
+    const gridColumns = vNode.children.filter((childVNode) => childVNode.tagName === 'col');
+    const gridWidth = attributes.maximumWidth / gridColumns.length;
+
+    for (let index = 0; index < gridColumns.length; index++) {
+      const tableGridColFragment = buildTableGridCol(gridWidth);
+      tableGridFragment.import(tableGridColFragment);
+    }
+  }
   tableGridFragment.up();
+
   return tableGridFragment;
 };
 
 const buildTableProperties = (attributes) => {
-  const tablePropertiesFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('w:tblPr');
-  tablePropertiesFragment.ele('w:tblW').att('w:w', attributes.width).att('w:type', 'pct').up();
-  tablePropertiesFragment.ele('w:tblLayout').att('w:type', 'fixed').up();
+  const tablePropertiesFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tblPr');
+  tablePropertiesFragment.ele('@w', 'tblW').att('@w', 'w', attributes.width).att('@w', 'type', 'pct').up();
+  tablePropertiesFragment.ele('@w', 'tblLayout').att('@w', 'type', 'fixed').up();
   tablePropertiesFragment
-    .ele('w:tblCellMar')
-    .ele('w:tblInd')
-    .att('w:w', '0')
-    .att('w:type', 'dxa')
+    .ele('@w', 'tblCellMar')
+    .ele('@w', 'tblInd')
+    .att('@w', 'w', '0')
+    .att('@w', 'type', 'dxa')
     .up()
-    .ele('w:top')
-    .att('w:w', '0')
-    .att('w:type', 'dxa')
+    .ele('@w', 'top')
+    .att('@w', 'w', '0')
+    .att('@w', 'type', 'dxa')
     .up()
-    .ele('w:left')
-    .att('w:w', '0')
-    .att('w:type', 'dxa')
+    .ele('@w', 'left')
+    .att('@w', 'w', '0')
+    .att('@w', 'type', 'dxa')
     .up()
-    .ele('w:bottom')
-    .att('w:w', '0')
-    .att('w:type', 'dxa')
+    .ele('@w', 'bottom')
+    .att('@w', 'w', '0')
+    .att('@w', 'type', 'dxa')
     .up()
-    .ele('w:right')
-    .att('w:w', '0')
-    .att('w:type', 'dxa')
+    .ele('@w', 'right')
+    .att('@w', 'w', '0')
+    .att('@w', 'type', 'dxa')
     .up()
     .up();
 
@@ -1435,7 +1449,7 @@ const cssBorderParser = (borderString) => {
 };
 
 const buildTable = async (vNode, attributes, docxDocumentInstance) => {
-  const tableFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('w:tbl');
+  const tableFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tbl');
   const modifiedAttributes = { ...attributes };
 
   if (isVNode(vNode) && vNode.properties) {
