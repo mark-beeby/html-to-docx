@@ -114,36 +114,57 @@ const fixupColorCode = (colorCodeString) => {
 
 const recursiveRunOrHyperlink = async (vNode, attributes, docxDocumentInstance) => {
   let runFragments = [];
-  // eslint-disable-next-line no-restricted-syntax
+  const combinedAttributes = modifiedStyleAttributesBuilder(
+    docxDocumentInstance,
+    vNode,
+    attributes
+  );
   for (const childVNode of vNode.children) {
     if (isVNode(childVNode)) {
-      // eslint-disable-next-line no-shadow
+      // eslint-disable-next-line no-use-before-define
+      const combinedChildAttributes = modifiedStyleAttributesBuilder(
+        docxDocumentInstance,
+        childVNode,
+        combinedAttributes
+      );
+
       let fragment = null;
-      // Check for hyperlinks
+
       if (childVNode.tagName === 'a') {
         // eslint-disable-next-line no-use-before-define
-        fragment = await buildRunOrHyperLink(childVNode, attributes, docxDocumentInstance);
-        // Check for <span> to dive deeper
+        fragment = await buildRunOrHyperLink(
+          childVNode,
+          combinedChildAttributes,
+          docxDocumentInstance
+        );
       } else if (childVNode.tagName === 'span') {
-        fragment = await recursiveRunOrHyperlink(childVNode, attributes, docxDocumentInstance);
-        // Handle emphasized or other text nodes
+        fragment = await recursiveRunOrHyperlink(
+          childVNode,
+          combinedChildAttributes,
+          docxDocumentInstance
+        );
       } else {
         // eslint-disable-next-line no-use-before-define
-        fragment = await buildRunOrRuns(childVNode, attributes, docxDocumentInstance);
+        fragment = await buildRunOrRuns(childVNode, combinedChildAttributes, docxDocumentInstance);
       }
-      // Ensure fragments are added to the output array
+
       if (fragment) {
         runFragments = runFragments.concat(Array.isArray(fragment) ? fragment : [fragment]);
       }
     } else if (isVText(childVNode)) {
+      // Ensure styles are captured from parent attributes
       // eslint-disable-next-line no-use-before-define
       const textFragment = buildTextElement(childVNode.text);
-      const runFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'r');
-      runFragment.import(textFragment);
-      runFragment.up();
-      runFragments.push(runFragment);
+      const styledRunFragment = fragment({ namespaceAlias: { w: namespaces.w } })
+        .ele('@w', 'r')
+        // eslint-disable-next-line no-use-before-define
+        .import(buildRunProperties(combinedAttributes)) // Use "attributes" incorporating parent styles
+        .import(textFragment);
+      styledRunFragment.up();
+      runFragments.push(styledRunFragment);
     }
   }
+
   return runFragments;
 };
 
