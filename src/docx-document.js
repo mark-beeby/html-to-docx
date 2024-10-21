@@ -242,6 +242,9 @@ class DocxDocument {
   }
 
   generateDocumentXML() {
+    if (this.footer) {
+      this.margins.footer = 0;
+    }
     const documentXML = create(
       { encoding: 'UTF-8', standalone: true },
       generateDocumentTemplate(this.width, this.height, this.orientation, this.margins)
