@@ -243,7 +243,8 @@ class DocxDocument {
 
   generateDocumentXML() {
     if (this.footer) {
-      this.margins.footer = 0;
+      this.margins.footer = 1;
+      this.margins.bottom = 1;
     }
     const documentXML = create(
       { encoding: 'UTF-8', standalone: true },
