@@ -383,8 +383,6 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
         docxDocumentInstance
       );
       xmlFragment.import(tableFragment);
-      const emptyParaFragment = await xmlBuilder.buildParagraph(null, {});
-      xmlFragment.import(emptyParaFragment);
       return;
 
     case 'ul':
