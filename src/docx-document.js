@@ -149,6 +149,7 @@ class DocxDocument {
     this.header = properties.header || false;
     this.footerType = properties.footerType || 'default';
     this.footer = properties.footer || false;
+    this.suppressFooterMargins = properties.suppressFooterMargins || false;
     this.font = properties.font || defaultFont;
     this.fontSize = properties.fontSize || defaultFontSize;
     this.complexScriptFontSize = properties.complexScriptFontSize || defaultFontSize;
@@ -242,14 +243,15 @@ class DocxDocument {
   }
 
   generateDocumentXML() {
-    if (this.footer) {
-      this.margins.footer = 1;
-      this.margins.bottom = 1;
-    }
     const documentXML = create(
       { encoding: 'UTF-8', standalone: true },
       generateDocumentTemplate(this.width, this.height, this.orientation, this.margins)
     );
+
+    if (this.suppressFooterMargins) {
+      this.margins.footer = 1;
+      this.margins.bottom = 1;
+    }
 
     documentXML.root().att('xmlns:w', namespaces.w);
     documentXML.root().att('xmlns:r', namespaces.r);

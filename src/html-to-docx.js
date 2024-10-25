@@ -136,6 +136,9 @@ async function addFilesToContainer(
     // eslint-disable-next-line no-param-reassign
     footerHTMLString = decode(footerHTMLString);
   }
+
+  documentOptions.suppressFooterMargins = footerHTMLString && footerHTMLString.length;
+
   const docxDocument = new DocxDocument({ zip, htmlString, ...documentOptions });
 
   docxDocument.documentXML = await renderDocumentFile(docxDocument);
