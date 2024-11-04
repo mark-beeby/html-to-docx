@@ -750,6 +750,13 @@ const buildRunOrHyperLink = async (vNode, attributes, docxDocumentInstance) => {
   }
 
   if (isVNode(vNode) && vNode.tagName === 'span') {
+    if (
+      vNode.children.length === 0 &&
+      vNode.properties?.attributes?.['data-force-space'] === 'true'
+    ) {
+      // Create a virtual text node with a single space character
+      vNode.children.push(new VirtualText(' '));
+    }
     return recursiveRunOrHyperlink(vNode, attributes, docxDocumentInstance);
   } else {
     return buildRunOrRuns(vNode, attributes, docxDocumentInstance);
