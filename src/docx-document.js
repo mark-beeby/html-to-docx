@@ -650,6 +650,14 @@ class DocxDocument {
 
     let headerHeight = null;
 
+    if (vTree) {
+      const XMLFragment = fragment();
+      await convertVTreeToXML(this, vTree, XMLFragment);
+      headerXML.import(XMLFragment);
+
+      this.vTreeHeight = Math.ceil(this.estimateVTreeHeight(XMLFragment) / 635); // Convert EMUs to TWIPs
+    }
+
     if (headerConfig) {
       if (headerConfig.backgroundImage) {
         const backgroundHeight = await this.addBackgroundImage(
@@ -673,14 +681,6 @@ class DocxDocument {
 
       // Calculate the header height
       headerHeight = this.calculateHeaderHeight();
-    }
-
-    if (vTree) {
-      const XMLFragment = fragment();
-      await convertVTreeToXML(this, vTree, XMLFragment);
-      headerXML.import(XMLFragment);
-
-      this.vTreeHeight = Math.ceil(this.estimateVTreeHeight(XMLFragment) / 635); // Convert EMUs to TWIPs
     }
 
     // Return headerId, headerXML, and calculated headerHeight
@@ -713,6 +713,14 @@ class DocxDocument {
 
     let footerHeight = null;
 
+    if (vTree) {
+      const XMLFragment = fragment();
+      await convertVTreeToXML(this, vTree, XMLFragment);
+      footerXML.import(XMLFragment);
+
+      this.vTreeHeight = Math.ceil(this.estimateVTreeHeight(XMLFragment) / 635); // Convert EMUs to TWIPs
+    }
+
     if (footerConfig) {
       if (footerConfig.backgroundImage) {
         const backgroundHeight = await this.addBackgroundImage(
@@ -738,14 +746,6 @@ class DocxDocument {
       footerHeight = this.calculateFooterHeight();
     }
 
-    if (vTree) {
-      const XMLFragment = fragment();
-      await convertVTreeToXML(this, vTree, XMLFragment);
-      footerXML.import(XMLFragment);
-
-      this.vTreeHeight = Math.ceil(this.estimateVTreeHeight(XMLFragment) / 635); // Convert EMUs to TWIPs
-    }
-
     // Return footerId, footerXML, and calculated footerHeight
     return { footerId, footerXML, footerHeight };
   }
@@ -753,15 +753,87 @@ class DocxDocument {
   // Helper method to estimate vTree height
   // eslint-disable-next-line class-methods-use-this
   estimateVTreeHeight(xmlFragment) {
-    // Convert the XML fragment to a string
     const xmlString = xmlFragment.toString();
 
-    // Estimate height based on string length
-    // This is a very rough estimate: assume 1 character is about 100 EMUs high
-    const estimatedHeight = xmlString.length * 100;
+    // Regex with explicit namespace handling
+    const paragraphRegex = /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">/g;
+    const nonEmptyParagraphRegex = /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">.*?<w:t\b[^>]*>.*?<\/w:t>/g;
+    const multiLineParagraphRegex = /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">.*?<w:br\/>/g;
+    const tableRegex = /<w:tbl>/g;
+    const tableRowRegex = /<w:tr>/g;
+    const imageRegex = /<wp:drawing>/g;
+    const textContentRegex = /<w:t\b[^>]*>([^<]+)<\/w:t>/g;
 
-    // Ensure a minimum height of 360000 EMUs (about 0.25 inches)
-    return Math.max(estimatedHeight, 360000);
+    // Count elements
+    const paragraphs = (xmlString.match(paragraphRegex) || []).length;
+    const nonEmptyParagraphs = (xmlString.match(nonEmptyParagraphRegex) || []).length;
+    const multiLineParagraphs = (xmlString.match(multiLineParagraphRegex) || []).length;
+    const tables = (xmlString.match(tableRegex) || []).length;
+    const tableRows = (xmlString.match(tableRowRegex) || []).length;
+    const images = (xmlString.match(imageRegex) || []).length;
+
+    // More accurate text content length
+    const textContentMatches = [...xmlString.matchAll(textContentRegex)];
+    const textContentLength = textContentMatches.reduce((total, match) => {
+      return total + (match[1] ? match[1].trim().length : 0);
+    }, 0);
+
+    // Base heights (in EMUs)
+    const BASE_PARAGRAPH_HEIGHT = 240000;     // 0.167 inches
+    const EMPTY_PARAGRAPH_HEIGHT = 120000;    // 0.083 inches
+    const MULTILINE_PARAGRAPH_MULTIPLIER = 1.5;
+    const BASE_TABLE_ROW_HEIGHT = 240000;    // 0.167 inches
+    const BASE_IMAGE_HEIGHT = 720000;        // 0.5 inches
+
+    // Calculate estimated heights with more precision
+    const paragraphHeight = (
+      (nonEmptyParagraphs * BASE_PARAGRAPH_HEIGHT) +
+      ((paragraphs - nonEmptyParagraphs) * EMPTY_PARAGRAPH_HEIGHT) +
+      (multiLineParagraphs * BASE_PARAGRAPH_HEIGHT * MULTILINE_PARAGRAPH_MULTIPLIER)
+    );
+
+    const tableHeight = tableRows * BASE_TABLE_ROW_HEIGHT;
+    const imageHeight = images * BASE_IMAGE_HEIGHT;
+
+    // Text content complexity factor
+    const textContentFactor = Math.max(1, Math.log(textContentLength + 1) * 0.7);
+
+    // Combine estimations with intelligent weighting
+    const totalEstimatedHeight = (
+      paragraphHeight +
+      tableHeight +
+      imageHeight * 1.5 +  // Give slightly more weight to images
+      (textContentLength * 5000)  // Fine-tuned text content contribution
+    ) * textContentFactor;
+
+    // Logging for debugging
+    // console.log('Height Estimation Breakdown:', {
+    //   paragraphs,
+    //   nonEmptyParagraphs,
+    //   multiLineParagraphs,
+    //   tables,
+    //   tableRows,
+    //   images,
+    //   textContentLength,
+    //   paragraphHeight,
+    //   tableHeight,
+    //   imageHeight,
+    //   textContentFactor,
+    //   totalEstimatedHeight
+    // });
+
+    // Ensure a minimum and maximum reasonable height
+    const MIN_HEIGHT = 240000;     // 0.167 inches
+    const MAX_HEIGHT = 7200000;    // 5 inches
+
+    const finalHeight = Math.min(
+      Math.max(totalEstimatedHeight, MIN_HEIGHT),
+      MAX_HEIGHT
+    );
+
+    // console.log('Final Calculated Height:', finalHeight);
+
+    return finalHeight;
   }
 
   // eslint-disable-next-line consistent-return
