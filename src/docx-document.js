@@ -678,11 +678,12 @@ class DocxDocument {
           this.logoHeights.push(Math.ceil(logoHeight / 635)); // Convert EMUs to TWIPs
         }
       }
+    }
 
+    if (headerConfig) {
       // Calculate the header height
       headerHeight = this.calculateHeaderHeight();
     }
-
     // Return headerId, headerXML, and calculated headerHeight
     return { headerId, headerXML, headerHeight };
   }
@@ -741,7 +742,9 @@ class DocxDocument {
           this.logoHeights.push(Math.ceil(logoHeight / 635)); // Convert EMUs to TWIPs
         }
       }
+    }
 
+    if (footerConfig) {
       // Calculate the footer height
       footerHeight = this.calculateFooterHeight();
     }
@@ -973,6 +976,32 @@ class DocxDocument {
     }
   }
 
+  async getImageHeight(image) {
+    const { url, width, height } = image;
+
+    try {
+      const { imageWidth, imageHeight } = await this.fetchImageAndGetDimensions(url);
+
+      // Calculate dimensions based on provided width or height, maintaining aspect ratio
+      const aspectRatio = imageWidth / imageHeight;
+      let widthEMU;
+      if (width && !height) {
+        widthEMU = Math.round(parseFloat(width) * 9525); // 1 px = 9525 EMUs
+        return Math.round(widthEMU / aspectRatio);
+      }
+      if (!width && height) {
+        return Math.round(parseFloat(height) * 9525);
+      }
+      if (width && height) {
+        return Math.round(parseFloat(height) * 9525);
+      }
+      // If neither width nor height is provided, use original dimensions
+      return Math.round(imageHeight * 9525);
+    } catch (e) {
+      console.error('Error processing image height:', e);
+    }
+  }
+
   async addLogo(headerXML, logo, headerId) {
     const { url, width, height, alignment } = logo;
 
@@ -1011,9 +1040,44 @@ class DocxDocument {
         heightEMU = Math.round(imageHeight * 9525);
       }
 
-      const paragraph = headerXML.ele('@w', 'p');
-      paragraph
-        .ele('@w', 'r')
+      // Find the first paragraph or create a new paragraph for the header
+      let lastParagraph = null;
+      let paragraphProperties = null;
+      try {
+        lastParagraph = headerXML.first('@w', 'p');
+      } catch (e) {
+        lastParagraph = headerXML.ele('@w', 'p');
+      }
+
+      if (!lastParagraph) {
+        lastParagraph = headerXML.ele('@w', 'p');
+      }
+
+      // Add a paragraph style if not exists
+      try {
+        paragraphProperties = lastParagraph.first('@w', 'pPr');
+      } catch (e) {
+        lastParagraph.ele('@w', 'pPr').ele('@w', 'pStyle').att('@w', 'val', 'Header');
+      }
+
+      if (!paragraphProperties) {
+        lastParagraph.ele('@w', 'pPr').ele('@w', 'pStyle').att('@w', 'val', 'Header');
+      }
+
+      const pageWidthTwips = 11906; // in twips
+      const pageWidthEMU = pageWidthTwips * 635; // converts twips to EMUs
+      const leftOffset = 180000; // 1 cm gap from the left edge
+      const centerOffset = (pageWidthEMU - widthEMU) / 2;
+      const rightOffset = pageWidthEMU - widthEMU - 180000; // 1 cm gap from the right edge
+      // eslint-disable-next-line no-nested-ternary
+      const posOffset =
+        alignment === 'center' ? centerOffset : alignment === 'right' ? rightOffset : leftOffset;
+
+      // Create the run with the drawing
+      const run = lastParagraph.ele('@w', 'r');
+
+      // Create the drawing with anchor
+      const drawing = run
         .ele('@w', 'drawing')
         .ele('@wp', 'anchor')
         .att('behindDoc', '1')
@@ -1031,13 +1095,13 @@ class DocxDocument {
         .att('y', '0')
         .up()
         .ele('@wp', 'positionH')
-        .att('relativeFrom', 'column')
-        .ele('@wp', 'align')
-        .txt(alignment)
+        .att('relativeFrom', 'page') // Use 'page' for the width of the document context
+        .ele('@wp', 'posOffset')
+        .txt(posOffset)
         .up()
         .up()
         .ele('@wp', 'positionV')
-        .att('relativeFrom', 'paragraph')
+        .att('relativeFrom', 'paragraph') // Try 'paragraph' instead of 'page'
         .ele('@wp', 'posOffset')
         .txt('0')
         .up()

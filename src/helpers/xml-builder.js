@@ -1361,7 +1361,7 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
       .up()
       .ele('@w', 'tcMar')
       .ele('@w', 'top')
-      .att('@w', 'w', '100')
+      .att('@w', 'w', '0')
       .att('@w', 'type', 'dxa')
       .up()
       .ele('@w', 'left')
@@ -1369,7 +1369,7 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
       .att('@w', 'type', 'dxa')
       .up()
       .ele('@w', 'bottom')
-      .att('@w', 'w', '100')
+      .att('@w', 'w', '0')
       .att('@w', 'type', 'dxa')
       .up()
       .ele('@w', 'right')
@@ -1649,7 +1649,7 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
     }
   }
 
-  const paddingPerCell = 1000; // 100 twips left + 100 twips right
+  const paddingPerCell = 0; // 100 twips left + 100 twips right
   const totalPadding = columnCount * paddingPerCell;
   if (modifiedAttributes.width) {
     modifiedAttributes.width = Math.max(modifiedAttributes.width - totalPadding, 0);
