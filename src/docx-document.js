@@ -205,7 +205,7 @@ class DocxDocument {
     }
 
     if (this.vTreeHeight) {
-      headerHeight += this.vTreeHeight;
+      headerHeight = Math.max(720 + this.vTreeHeight, headerHeight);
     }
 
     headerHeight += 240;
@@ -225,7 +225,7 @@ class DocxDocument {
     }
 
     if (this.vTreeHeight) {
-      footerHeight += this.vTreeHeight;
+      footerHeight = Math.max(720 + this.vTreeHeight, footerHeight);
     }
 
     footerHeight += 240;
@@ -756,9 +756,12 @@ class DocxDocument {
     const xmlString = xmlFragment.toString();
 
     // Regex with explicit namespace handling
-    const paragraphRegex = /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">/g;
-    const nonEmptyParagraphRegex = /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">.*?<w:t\b[^>]*>.*?<\/w:t>/g;
-    const multiLineParagraphRegex = /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">.*?<w:br\/>/g;
+    const paragraphRegex =
+      /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">/g;
+    const nonEmptyParagraphRegex =
+      /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">.*?<w:t\b[^>]*>.*?<\/w:t>/g;
+    const multiLineParagraphRegex =
+      /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">.*?<w:br\/>/g;
     const tableRegex = /<w:tbl>/g;
     const tableRowRegex = /<w:tr>/g;
     const imageRegex = /<wp:drawing>/g;
@@ -774,23 +777,23 @@ class DocxDocument {
 
     // More accurate text content length
     const textContentMatches = [...xmlString.matchAll(textContentRegex)];
-    const textContentLength = textContentMatches.reduce((total, match) => {
-      return total + (match[1] ? match[1].trim().length : 0);
-    }, 0);
+    const textContentLength = textContentMatches.reduce(
+      (total, match) => total + (match[1] ? match[1].trim().length : 0),
+      0
+    );
 
     // Base heights (in EMUs)
-    const BASE_PARAGRAPH_HEIGHT = 240000;     // 0.167 inches
-    const EMPTY_PARAGRAPH_HEIGHT = 120000;    // 0.083 inches
+    const BASE_PARAGRAPH_HEIGHT = 240000; // 0.167 inches
+    const EMPTY_PARAGRAPH_HEIGHT = 120000; // 0.083 inches
     const MULTILINE_PARAGRAPH_MULTIPLIER = 1.5;
-    const BASE_TABLE_ROW_HEIGHT = 240000;    // 0.167 inches
-    const BASE_IMAGE_HEIGHT = 720000;        // 0.5 inches
+    const BASE_TABLE_ROW_HEIGHT = 240000; // 0.167 inches
+    const BASE_IMAGE_HEIGHT = 720000; // 0.5 inches
 
     // Calculate estimated heights with more precision
-    const paragraphHeight = (
-      (nonEmptyParagraphs * BASE_PARAGRAPH_HEIGHT) +
-      ((paragraphs - nonEmptyParagraphs) * EMPTY_PARAGRAPH_HEIGHT) +
-      (multiLineParagraphs * BASE_PARAGRAPH_HEIGHT * MULTILINE_PARAGRAPH_MULTIPLIER)
-    );
+    const paragraphHeight =
+      nonEmptyParagraphs * BASE_PARAGRAPH_HEIGHT +
+      (paragraphs - nonEmptyParagraphs) * EMPTY_PARAGRAPH_HEIGHT +
+      multiLineParagraphs * BASE_PARAGRAPH_HEIGHT * MULTILINE_PARAGRAPH_MULTIPLIER;
 
     const tableHeight = tableRows * BASE_TABLE_ROW_HEIGHT;
     const imageHeight = images * BASE_IMAGE_HEIGHT;
@@ -799,12 +802,12 @@ class DocxDocument {
     const textContentFactor = Math.max(1, Math.log(textContentLength + 1) * 0.7);
 
     // Combine estimations with intelligent weighting
-    const totalEstimatedHeight = (
-      paragraphHeight +
-      tableHeight +
-      imageHeight * 1.5 +  // Give slightly more weight to images
-      (textContentLength * 5000)  // Fine-tuned text content contribution
-    ) * textContentFactor;
+    const totalEstimatedHeight =
+      (paragraphHeight +
+        tableHeight +
+        imageHeight * 1.5 + // Give slightly more weight to images
+        textContentLength * 5000) * // Fine-tuned text content contribution
+      textContentFactor;
 
     // Logging for debugging
     // console.log('Height Estimation Breakdown:', {
@@ -823,13 +826,10 @@ class DocxDocument {
     // });
 
     // Ensure a minimum and maximum reasonable height
-    const MIN_HEIGHT = 240000;     // 0.167 inches
-    const MAX_HEIGHT = 7200000;    // 5 inches
+    const MIN_HEIGHT = 240000; // 0.167 inches
+    const MAX_HEIGHT = 7200000; // 5 inches
 
-    const finalHeight = Math.min(
-      Math.max(totalEstimatedHeight, MIN_HEIGHT),
-      MAX_HEIGHT
-    );
+    const finalHeight = Math.min(Math.max(totalEstimatedHeight, MIN_HEIGHT), MAX_HEIGHT);
 
     // console.log('Final Calculated Height:', finalHeight);
 
