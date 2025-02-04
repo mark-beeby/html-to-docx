@@ -35,16 +35,7 @@ import {
   pointToTWIP,
   pixelToHIP,
   pixelToTWIP,
-  pixelToEIP,
-  pointToEIP,
-  cmToTWIP,
-  cmRegex,
-  inchRegex,
-  inchToTWIP,
 } from '../utils/unit-conversion';
-// FIXME: remove the cyclic dependency
-// eslint-disable-next-line import/no-cycle
-import { convertVTreeToXML } from './render-document-file';
 import {
   defaultFont,
   hyperlinkType,
@@ -74,6 +65,7 @@ const cssVerticalAlignMapping = {
   top: 'top',
   bottom: 'bottom',
   center: 'center',
+  inherit: 'center', // Default to center when inheriting
 };
 
 // eslint-disable-next-line consistent-return
@@ -114,11 +106,13 @@ const fixupColorCode = (colorCodeString) => {
 
 const recursiveRunOrHyperlink = async (vNode, attributes, docxDocumentInstance) => {
   let runFragments = [];
+  // eslint-disable-next-line no-use-before-define
   const combinedAttributes = modifiedStyleAttributesBuilder(
     docxDocumentInstance,
     vNode,
     attributes
   );
+  // eslint-disable-next-line no-restricted-syntax
   for (const childVNode of vNode.children) {
     if (isVNode(childVNode)) {
       // eslint-disable-next-line no-use-before-define
@@ -128,6 +122,7 @@ const recursiveRunOrHyperlink = async (vNode, attributes, docxDocumentInstance) 
         combinedAttributes
       );
 
+      // eslint-disable-next-line no-shadow
       let fragment = null;
 
       if (childVNode.tagName === 'a') {
@@ -291,24 +286,6 @@ const fixupFontSize = (fontSizeString) => {
     const matchedParts = fontSizeString.match(pixelRegex);
     // convert pixels to half point
     return pixelToHIP(matchedParts[1]);
-  }
-};
-
-// eslint-disable-next-line consistent-return
-// eslint-disable-next-line consistent-return
-const fixupColumnWidth = (columnWidthString) => {
-  if (pointRegex.test(columnWidthString)) {
-    const matchedParts = columnWidthString.match(pointRegex);
-    return pointToTWIP(matchedParts[1]);
-  } else if (pixelRegex.test(columnWidthString)) {
-    const matchedParts = columnWidthString.match(pixelRegex);
-    return pixelToTWIP(matchedParts[1]);
-  } else if (cmRegex.test(columnWidthString)) {
-    const matchedParts = columnWidthString.match(cmRegex);
-    return cmToTWIP(matchedParts[1]);
-  } else if (inchRegex.test(columnWidthString)) {
-    const matchedParts = columnWidthString.match(inchRegex);
-    return inchToTWIP(matchedParts[1]);
   }
 };
 
@@ -1203,7 +1180,13 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
 
   if (modifiedAttributes.marginBottom) {
     const spacingFragment = buildSpacing(null, null, modifiedAttributes.marginBottom);
+    // eslint-disable-next-line no-shadow
+    const paragraphPropertiesFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele(
+      '@w',
+      'pPr'
+    );
     paragraphPropertiesFragment.import(spacingFragment);
+    paragraphFragment.import(paragraphPropertiesFragment);
   }
 
   paragraphFragment.up();
@@ -1211,15 +1194,27 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
   return paragraphFragment;
 };
 
+// eslint-disable-next-line no-unused-vars
 async function resizeNestedTable(vNode, parentColumnWidth, docxDocumentInstance) {
   const tableFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tbl');
   if (isVNode(vNode) && vNode.properties) {
     const tableStyles = vNode.properties.style || {};
-    const width = parentColumnWidth; // Set width to parent column width if data attribute doesn't exist
+    let width = parentColumnWidth; // Set width to parent column width if data attribute doesn't exist
 
     if (tableStyles.width) {
-      if (percentageRegex.test(tableStyles.width)) {
-        tableStyles.width = '100%'; // Override to 100%
+      if (tableStyles.width !== 'auto') {
+        if (pixelRegex.test(tableStyles.width)) {
+          width = pixelToTWIP(tableStyles.width.match(pixelRegex)[1]);
+        } else if (percentageRegex.test(tableStyles.width)) {
+          const percentageValue = tableStyles.width.match(percentageRegex)[1];
+
+          width = Math.round((percentageValue / 100) * parentColumnWidth);
+        }
+      } else {
+        // eslint-disable-next-line no-lonely-if
+        if (vNode.properties.style.height && vNode.properties.style.height === 'auto') {
+          width = parentColumnWidth;
+        }
       }
     }
 
@@ -1229,6 +1224,10 @@ async function resizeNestedTable(vNode, parentColumnWidth, docxDocumentInstance)
       .ele('@w', 'tblW')
       .att('@w', 'w', width)
       .att('@w', 'type', 'pct')
+      .up()
+      .ele('@w', 'tblInd')
+      .att('@w', 'w', '0')
+      .att('@w', 'type', 'dxa')
       .up()
       .ele('@w', 'tblLayout')
       .att('@w', 'type', 'fixed')
@@ -1309,108 +1308,211 @@ async function resizeNestedTable(vNode, parentColumnWidth, docxDocumentInstance)
 const buildTableRow = async function buildTableRow(docxDocumentInstance, columns, attributes = {}) {
   const tableRowFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tr');
 
+  // Add consistent row height
+  const trPr = tableRowFragment.ele('@w', 'trPr');
+  trPr
+    .ele('@w', 'trHeight')
+    .att('@w', 'val', '400') // Set a default height of 400 twips (about 0.28 inches)
+    .att('@w', 'hRule', 'atLeast'); // atLeast ensures minimum height while allowing expansion if needed
+
+  // Process each column
   // eslint-disable-next-line no-restricted-syntax
   for (const column of columns) {
-    const colWidth = parseInt(column.properties.attributes['data-docx-column'] || '1', 10);
+    const colWidth = parseInt(column.properties?.attributes?.['data-docx-column'] || '1', 10);
     const totalPadding = columns.length * 200;
     const colWidthTwips =
       Math.floor((colWidth / 12) * docxDocumentInstance.availableDocumentSpace) - totalPadding;
-    const tableCellFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tc');
-    const align = column.properties?.style?.['text-align'];
-    const vAlign = column.properties?.attributes?.valign;
-    const cssVAlign = column.properties?.style?.['vertical-align'];
-    let cellBgOverride = column.properties?.style?.['background-color'] || false;
 
-    if (cellBgOverride) {
-      // Convert RGB to hex if necessary
-      if (cellBgOverride.startsWith('rgb')) {
-        const rgb = cellBgOverride.match(/\d+/g);
-        if (rgb && rgb.length === 3) {
-          cellBgOverride = rgbToHex(parseInt(rgb[0]), parseInt(rgb[1]), parseInt(rgb[2]));
-        }
-      }
-      // Remove '#' if present
-      cellBgOverride = cellBgOverride.replace('#', '');
-    }
-
-    // eslint-disable-next-line no-nested-ternary
-    const cssOrValignAlignment = cssVAlign
-      ? cssVerticalAlignMapping[cssVAlign] || 'center'
-      : vAlign
-      ? valignMapping[vAlign] || 'center'
-      : 'center';
-
-    if (align) {
-      column.children.forEach((child) => {
-        if (!child.properties?.style?.['text-align']) {
-          child.properties = child.properties || {};
-          child.properties.style = child.properties.style || {};
-          child.properties.style['text-align'] = column.properties.style['text-align'];
-        }
-      });
-    }
-    // Set up column width
-    tableCellFragment
-      .ele('@w', 'tcPr')
-      .ele('@w', 'tcW')
-      .att('@w', 'w', colWidthTwips.toString())
-      .att('@w', 'type', 'dxa')
-      .up()
-      .ele('@w', 'vAlign')
-      .att('@w', 'val', cssOrValignAlignment)
-      .up()
-      .ele('@w', 'tcMar')
-      .ele('@w', 'top')
-      .att('@w', 'w', '0')
-      .att('@w', 'type', 'dxa')
-      .up()
-      .ele('@w', 'left')
-      .att('@w', 'w', '100')
-      .att('@w', 'type', 'dxa')
-      .up()
-      .ele('@w', 'bottom')
-      .att('@w', 'w', '0')
-      .att('@w', 'type', 'dxa')
-      .up()
-      .ele('@w', 'right')
-      .att('@w', 'w', '100')
-      .att('@w', 'type', 'dxa')
-      .up();
-
-    if (cellBgOverride || attributes.backgroundColor) {
-      const bgColour = cellBgOverride || attributes.backgroundColor;
-      tableCellFragment
-        .first()
-        .ele('@w', 'shd')
-        .att('@w', 'val', 'clear')
-        .att('@w', 'fill', bgColour.toUpperCase())
-        .up();
-    }
-
-    tableCellFragment.up();
-
-    // Import cell content
-    await convertVTreeToXML(docxDocumentInstance, column.children, tableCellFragment);
-
-    // Handle nested tables recursively
-    // eslint-disable-next-line no-restricted-syntax
-    for (const child of column.children) {
-      if (isVNode(child) && child.tagName === 'table') {
-        const nestedTableFragment = await resizeNestedTable(
-          child,
-          colWidthTwips,
-          docxDocumentInstance
-        );
-        tableCellFragment.import(nestedTableFragment);
-      }
-    }
-
-    tableCellFragment.up(); // Close the table cell fragment
+    // eslint-disable-next-line no-use-before-define
+    const tableCellFragment = await buildTableCell(
+      column,
+      colWidthTwips,
+      docxDocumentInstance,
+      attributes
+    );
     tableRowFragment.import(tableCellFragment);
   }
 
-  tableRowFragment.up(); // Close the table row fragment
   return tableRowFragment;
+};
+
+const buildTableCell = async function buildTableCell(
+  column,
+  colWidthTwips,
+  docxDocumentInstance,
+  attributes
+) {
+  const tableCellFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tc');
+  const properties = column.properties || {};
+  const styles = properties.style || {};
+
+  const tableCellProperties = tableCellFragment.ele('@w', 'tcPr');
+
+  // Handle cell width
+  tableCellProperties
+    .ele('@w', 'tcW')
+    .att('@w', 'w', colWidthTwips || 0)
+    .att('@w', 'type', 'dxa');
+
+  // Handle vertical alignment with proper defaults
+  const vAlign = properties?.attributes?.valign;
+  const cssVAlign = styles['vertical-align'];
+  let verticalAlignment;
+
+  if (cssVAlign) {
+    // Use CSS vertical-align if specified
+    verticalAlignment = cssVerticalAlignMapping[cssVAlign] || 'center';
+  } else if (vAlign) {
+    // Fallback to HTML valign attribute if specified
+    verticalAlignment = valignMapping[vAlign] || 'center';
+  } else {
+    // Default to center (middle) alignment
+    verticalAlignment = 'center';
+  }
+
+  tableCellProperties.ele('@w', 'vAlign').att('@w', 'val', verticalAlignment);
+
+  // Handle cell borders - if border-style is hidden, we need to explicitly set no borders
+  if (styles['border-style'] === 'hidden') {
+    const tcBorders = tableCellProperties.ele('@w', 'tcBorders');
+
+    ['top', 'left', 'bottom', 'right'].forEach((side) => {
+      tcBorders
+        .ele('@w', side)
+        .att('@w', 'val', 'none')
+        .att('@w', 'sz', '0')
+        .att('@w', 'color', 'auto');
+    });
+
+    if (
+      (attributes.tableBorders && attributes.tableBorders.insideH) ||
+      attributes.tableBorders.insideV
+    ) {
+      ['insideH', 'insideV'].forEach((side) => {
+        if (attributes.tableBorders[side]) {
+          tcBorders
+            .ele('@w', side)
+            .att('@w', 'val', attributes.tableBorders.stroke)
+            .att('@w', 'sz', attributes.tableBorders[side] * 8)
+            .att('@w', 'color', attributes.tableBorders.color);
+        }
+      });
+    }
+  }
+
+  // Handle cell margins
+  const cellMargins = tableCellProperties.ele('@w', 'tcMar');
+
+  ['top', 'left', 'bottom', 'right'].forEach((direction) => {
+    cellMargins
+      .ele('@w', direction)
+      .att(
+        '@w',
+        'w',
+        attributes[`cellMargin${direction.charAt(0).toUpperCase()}${direction.slice(1)}`] || 0
+      )
+      .att('@w', 'type', 'dxa');
+  });
+
+  // Handle background color
+  let cellBgOverride = properties?.style?.['background-color'] || false;
+  if (cellBgOverride) {
+    // Convert RGB to hex if necessary
+    if (cellBgOverride.startsWith('rgb')) {
+      const rgb = cellBgOverride.match(/\d+/g);
+      if (rgb && rgb.length === 3) {
+        cellBgOverride = rgbToHex(parseInt(rgb[0]), parseInt(rgb[1]), parseInt(rgb[2]));
+      }
+    }
+    // Remove '#' if present
+    cellBgOverride = cellBgOverride.replace('#', '');
+
+    tableCellProperties
+      .ele('@w', 'shd')
+      .att('@w', 'val', 'clear')
+      .att('@w', 'fill', cellBgOverride.toUpperCase());
+  } else if (attributes.backgroundColor) {
+    tableCellProperties
+      .ele('@w', 'shd')
+      .att('@w', 'val', 'clear')
+      .att('@w', 'fill', attributes.backgroundColor.toUpperCase());
+  }
+
+  // Handle text alignment
+  if (styles['text-align']) {
+    column.children.forEach((child) => {
+      if (!child.properties?.style?.['text-align']) {
+        child.properties = child.properties || {};
+        child.properties.style = child.properties.style || {};
+        child.properties.style['text-align'] = properties.style['text-align'];
+      }
+    });
+  }
+
+  if (vNodeHasChildren(column)) {
+    // Create a paragraph for the cell content with alignment
+    const paragraph = tableCellFragment.ele('@w', 'p');
+    const pPr = paragraph.ele('@w', 'pPr');
+
+    // Add spacing
+    pPr
+      .ele('@w', 'spacing')
+      .att('@w', 'line', '240')
+      .att('@w', 'lineRule', 'auto')
+      .att('@w', 'before', '0')
+      .att('@w', 'after', '0');
+
+    // Add text alignment if specified
+    if (properties?.style?.['text-align']) {
+      pPr.ele('@w', 'jc').att('@w', 'val', properties.style['text-align']);
+    }
+
+    // Process cell content
+    // eslint-disable-next-line no-restricted-syntax
+    for (const child of column.children) {
+      if (isVText(child)) {
+        // Handle text nodes directly
+        const run = paragraph.ele('@w', 'r');
+        run.ele('@w', 'rPr');
+        run
+          .ele('@w', 't')
+          .att('xml:space', 'preserve')
+          .txt(child.text || '');
+      } else if (child.type === 'text') {
+        // Handle text nodes (non-VText)
+        const run = paragraph.ele('@w', 'r');
+        run.ele('@w', 'rPr');
+        run
+          .ele('@w', 't')
+          .att('xml:space', 'preserve')
+          .txt(child.value || '');
+      } else if (isVNode(child)) {
+        if (child.tagName === 'td' || child.tagName === 'th') {
+          // Skip nested table cells
+          // eslint-disable-next-line no-continue
+          continue;
+        }
+
+        // Handle other HTML elements
+        const renderedElement = await buildParagraph(
+          child,
+          {
+            textAlign: styles['text-align'],
+            verticalAlign: verticalAlignment,
+          },
+          docxDocumentInstance
+        );
+        if (renderedElement) {
+          tableCellFragment.import(renderedElement);
+        }
+      }
+    }
+  } else {
+    // Add an empty paragraph for empty cells
+    tableCellFragment.ele('@w', 'p');
+  }
+
+  return tableCellFragment;
 };
 
 const buildTableGridCol = (gridWidth) =>
@@ -1435,90 +1537,76 @@ const buildTableGrid = (vNode, attributes) => {
 };
 
 const buildTableProperties = (attributes) => {
-  const tablePropertiesFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele(
-    '@w',
-    'tblPr'
-  );
-  tablePropertiesFragment
-    .ele('@w', 'tblW')
-    .att('@w', 'w', attributes.width)
-    .att('@w', 'type', 'pct')
-    .up();
-  tablePropertiesFragment.ele('@w', 'tblLayout').att('@w', 'type', 'fixed').up();
-  tablePropertiesFragment
-    .ele('@w', 'tblCellMar')
-    .ele('@w', 'tblInd')
-    .att('@w', 'w', '0')
-    .att('@w', 'type', 'dxa')
-    .up()
-    .ele('@w', 'top')
-    .att('@w', 'w', '0')
-    .att('@w', 'type', 'dxa')
-    .up()
-    .ele('@w', 'left')
-    .att('@w', 'w', '0')
-    .att('@w', 'type', 'dxa')
-    .up()
-    .ele('@w', 'bottom')
-    .att('@w', 'w', '0')
-    .att('@w', 'type', 'dxa')
-    .up()
-    .ele('@w', 'right')
-    .att('@w', 'w', '0')
-    .att('@w', 'type', 'dxa')
-    .up()
-    .up();
+  const { maximumWidth } = attributes;
+  const tableFragment = fragment({ namespaceAlias: { w: namespaces.w } });
+  const tableProperties = tableFragment.ele('@w', 'tblPr');
 
-  return tablePropertiesFragment;
-};
+  if (maximumWidth) {
+    tableProperties
+      .ele('@w', 'tblW')
+      .att('@w', 'w', Math.round((maximumWidth / 100) * 5000))
+      .att('@w', 'type', 'pct');
+  }
 
-const buildTableGridFromTableRow = (vNode, maximumWidth) => {
-  const tableGridFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tblGrid');
-  if (vNodeHasChildren(vNode)) {
-    const columnWidths = [];
+  // Add table borders if present
+  if (attributes.tableBorders) {
+    const tblBorders = tableProperties.ele('@w', 'tblBorders');
 
-    vNode.children.forEach((childVNode) => {
-      if (childVNode.tagName === 'td' || childVNode.tagName === 'th') {
-        const width = childVNode.properties?.style?.width || `${100 / vNode.children.length}%`;
-        const parsedWidth = width.endsWith('%')
-          ? Math.round(parseFloat(width) * 50)
-          : fixupColumnWidth(width);
-        columnWidths.push(parsedWidth);
-      }
+    ['top', 'left', 'bottom', 'right'].forEach((side) => {
+      tblBorders
+        .ele('@w', side)
+        .att('@w', 'val', attributes.tableBorders.stroke)
+        .att('@w', 'sz', attributes.tableBorders[side] * 8)
+        .att('@w', 'color', attributes.tableBorders.color);
     });
 
-    if (!columnWidths.length) {
-      const defaultWidth = Math.floor(maximumWidth / vNode.children.length);
-      vNode.children.forEach(() => columnWidths.push(defaultWidth));
+    if (attributes.tableBorders.insideH || attributes.tableBorders.insideV) {
+      ['insideH', 'insideV'].forEach((side) => {
+        if (attributes.tableBorders[side]) {
+          tblBorders
+            .ele('@w', side)
+            .att('@w', 'val', attributes.tableBorders.stroke)
+            .att('@w', 'sz', attributes.tableBorders[side] * 8)
+            .att('@w', 'color', attributes.tableBorders.color);
+        }
+      });
     }
-    columnWidths.forEach((width) => {
-      const colFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'gridCol');
-      colFragment.att('@w', 'w', width.toString()).up();
-      tableGridFragment.import(colFragment);
-    });
   }
 
-  tableGridFragment.up(); // Complete the grid fragment.
-  return tableGridFragment;
+  tableProperties.ele('@w', 'tblLayout').att('@w', 'type', 'fixed');
+
+  const tableCellMargins = tableProperties.ele('@w', 'tblCellMar');
+
+  tableCellMargins.ele('@w', 'tblInd').att('@w', 'w', 0).att('@w', 'type', 'dxa');
+
+  ['top', 'left', 'bottom', 'right'].forEach((direction) => {
+    tableCellMargins
+      .ele('@w', direction)
+      .att(
+        '@w',
+        'w',
+        attributes[`cellMargin${direction.charAt(0).toUpperCase()}${direction.slice(1)}`] || 0
+      )
+      .att('@w', 'type', 'dxa');
+  });
+
+  return tableFragment;
 };
 
-const cssBorderParser = (borderString) => {
-  let [size, stroke, color] = borderString.split(' ');
+const buildTableGridFromTableRow = (vNode, width) => {
+  const tableGridFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tblGrid');
+  const gridColumns = vNode.children.filter(
+    (childVNode) => childVNode.tagName === 'td' || childVNode.tagName === 'th'
+  );
+  const gridWidth = width / gridColumns.length;
 
-  if (pointRegex.test(size)) {
-    const matchedParts = size.match(pointRegex);
-    // convert point to eighth of a point
-    size = pointToEIP(matchedParts[1]);
-  } else if (pixelRegex.test(size)) {
-    const matchedParts = size.match(pixelRegex);
-    // convert pixels to eighth of a point
-    size = pixelToEIP(matchedParts[1]);
+  for (let index = 0; index < gridColumns.length; index++) {
+    const tableGridColFragment = buildTableGridCol(gridWidth);
+    tableGridFragment.import(tableGridColFragment);
   }
-  stroke = stroke && ['dashed', 'dotted', 'double'].includes(stroke) ? stroke : 'single';
+  tableGridFragment.up();
 
-  color = color && fixupColorCode(color).toUpperCase();
-
-  return [size, stroke, color];
+  return tableGridFragment;
 };
 
 const buildTable = async (vNode, attributes, docxDocumentInstance) => {
@@ -1528,64 +1616,60 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
   if (isVNode(vNode) && vNode.properties) {
     const tableAttributes = vNode.properties.attributes || {};
     const tableStyles = vNode.properties.style || {};
-    const tableBorders = {};
-    const tableCellBorders = {};
-    let [borderSize, borderStrike, borderColor] = [2, 'single', '000000'];
-    // eslint-disable-next-line no-restricted-globals
-    if (!isNaN(tableAttributes.border)) {
-      borderSize = parseInt(tableAttributes.border, 10);
-    }
-    if (tableStyles.border) {
-      const [cssSize, cssStroke, cssColor] = cssBorderParser(tableStyles.border);
-      borderSize = cssSize || borderSize;
-      borderColor = cssColor || borderColor;
-      borderStrike = cssStroke || borderStrike;
-    }
-    tableBorders.top = borderSize;
-    tableBorders.bottom = borderSize;
-    tableBorders.left = borderSize;
-    tableBorders.right = borderSize;
-    tableBorders.stroke = borderStrike;
-    tableBorders.color = borderColor;
-    if (tableStyles['border-collapse'] === 'collapse') {
-      tableBorders.insideV = borderSize;
-      tableBorders.insideH = borderSize;
+
+    // Check if border-style: hidden is set - this takes precedence over border attribute
+    if (tableStyles['border-style'] === 'hidden') {
+      modifiedAttributes.tableBorders = {
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        stroke: 'none',
+        color: 'auto',
+      };
     } else {
-      tableBorders.insideV = 0;
-      tableBorders.insideH = 0;
-      tableCellBorders.top = 1;
-      tableCellBorders.bottom = 1;
-      tableCellBorders.left = 1;
-      tableCellBorders.right = 1;
+      // Initialize border properties
+      let [borderSize, borderStrike, borderColor] = [0, 'single', '000000'];
+
+      // Check HTML border attribute
+      // eslint-disable-next-line no-restricted-globals
+      if (!isNaN(tableAttributes.border)) {
+        borderSize = parseInt(tableAttributes.border, 10);
+        if (borderSize > 0) {
+          borderStrike = 'single';
+          borderColor = '000000';
+        }
+      }
+
+      // Only add borders if we have a size > 0
+      if (borderSize > 0) {
+        modifiedAttributes.tableBorders = {
+          top: borderSize,
+          bottom: borderSize,
+          left: borderSize,
+          right: borderSize,
+          stroke: borderStrike,
+          color: borderColor,
+        };
+
+        // Add inside borders for collapsed tables
+        if (tableStyles['border-collapse'] === 'collapse') {
+          modifiedAttributes.tableBorders.insideH = borderSize;
+          modifiedAttributes.tableBorders.insideV = borderSize;
+        }
+      }
     }
-    modifiedAttributes.tableBorder = tableBorders;
-    modifiedAttributes.tableCellSpacing = 0;
-    if (Object.keys(tableCellBorders).length) {
-      modifiedAttributes.tableCellBorder = tableCellBorders;
-    }
+
     let minimumWidth;
     let maximumWidth;
     let width;
-
-    if (tableStyles['background-color']) {
-      let backgroundColor = tableStyles['background-color'];
-      // Convert RGB to hex if necessary
-      if (backgroundColor.startsWith('rgb')) {
-        const rgb = backgroundColor.match(/\d+/g);
-        if (rgb && rgb.length === 3) {
-          backgroundColor = rgbToHex(parseInt(rgb[0]), parseInt(rgb[1]), parseInt(rgb[2]));
-        }
-      }
-      // Remove '#' if present
-      backgroundColor = backgroundColor.replace('#', '');
-      modifiedAttributes.backgroundColor = backgroundColor;
-    }
 
     if (tableStyles['min-width']) {
       if (pixelRegex.test(tableStyles['min-width'])) {
         minimumWidth = pixelToTWIP(tableStyles['min-width'].match(pixelRegex)[1]);
       } else if (percentageRegex.test(tableStyles['min-width'])) {
         const percentageValue = tableStyles['min-width'].match(percentageRegex)[1];
+
         minimumWidth = Math.round((percentageValue / 100) * attributes.maximumWidth);
       }
     }
@@ -1657,6 +1741,34 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
 
   const tablePropertiesFragment = buildTableProperties(modifiedAttributes);
   tableFragment.import(tablePropertiesFragment);
+
+  // Add table borders if size > 0
+  if (modifiedAttributes.tableBorders) {
+    const tblBorders = tablePropertiesFragment.ele('@w', 'tblBorders');
+
+    // Add border for each side
+    ['top', 'left', 'bottom', 'right'].forEach((side) => {
+      tblBorders
+        .ele('@w', side)
+        .att('@w', 'val', modifiedAttributes.tableBorders.stroke)
+        .att('@w', 'sz', modifiedAttributes.tableBorders[side] * 8)
+        .att('@w', 'color', modifiedAttributes.tableBorders.color);
+    });
+
+    // Add inside borders for collapsed borders
+    if (modifiedAttributes.tableBorders.insideH || modifiedAttributes.tableBorders.insideV) {
+      ['insideH', 'insideV'].forEach((side) => {
+        if (modifiedAttributes.tableBorders[side]) {
+          tblBorders
+            .ele('@w', side)
+            .att('@w', 'val', modifiedAttributes.tableBorders.stroke)
+            .att('@w', 'sz', modifiedAttributes.tableBorders[side] * 8)
+            .att('@w', 'color', modifiedAttributes.tableBorders.color);
+        }
+      });
+    }
+  }
+
   let hasGrid = false;
   if (vNodeHasChildren(vNode)) {
     for (let index = 0; index < vNode.children.length; index++) {
