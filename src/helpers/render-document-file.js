@@ -13,13 +13,13 @@ import mimeTypes from 'mime-types';
 
 // FIXME: remove the cyclic dependency
 // eslint-disable-next-line import/no-cycle
+// eslint-disable-next-line import/no-cycle
 import * as xmlBuilder from './xml-builder';
+import { buildTableRow } from './xml-builder';
 import namespaces from '../namespaces';
 import { imageType, internalRelationship } from '../constants';
 import { vNodeHasChildren } from '../utils/vnode';
 import { isValidUrl } from '../utils/url';
-// eslint-disable-next-line import/no-cycle
-import { buildTableRow } from './xml-builder';
 
 const convertHTML = HTMLToVDOM({
   VNode,
@@ -276,8 +276,11 @@ export async function convertVTreeToXML(docxDocumentInstance, vTree, xmlFragment
     // eslint-disable-next-line no-use-before-define
     await findXMLEquivalent(docxDocumentInstance, vTree, xmlFragment);
   } else if (isVText(vTree)) {
-    const paragraphFragment = await xmlBuilder.buildParagraph(vTree, {}, docxDocumentInstance);
-    xmlFragment.import(paragraphFragment);
+    // Only create a paragraph for text nodes that have actual content
+    if (vTree.text.trim()) {
+      const paragraphFragment = await xmlBuilder.buildParagraph(vTree, {}, docxDocumentInstance);
+      xmlFragment.import(paragraphFragment);
+    }
   }
   return xmlFragment;
 }
@@ -310,6 +313,37 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     return;
   }
 
+  // Helper function to check if a node has direct text content
+  const hasDirectTextContent = (node) => {
+    if (!node || !vNodeHasChildren(node)) return false;
+    return node.children.some((child) => isVText(child) && child.text.trim());
+  };
+
+  // Helper function to check if a node has block elements as children
+  const hasBlockChildren = (node) => {
+    if (!node || !vNodeHasChildren(node)) return false;
+    return node.children.some(
+      (child) =>
+        isVNode(child) &&
+        [
+          'div',
+          'p',
+          'h1',
+          'h2',
+          'h3',
+          'h4',
+          'h5',
+          'h6',
+          'ul',
+          'ol',
+          'li',
+          'blockquote',
+          'table',
+          'figure',
+        ].includes(child.tagName)
+    );
+  };
+
   switch (vNode.tagName) {
     case 'h1':
     case 'h2':
@@ -339,12 +373,29 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     case 'sup':
     case 'mark':
     case 'p':
+    case 'div':
     case 'a':
     case 'blockquote':
     case 'code':
     case 'pre':
-      const paragraphFragment = await xmlBuilder.buildParagraph(vNode, {}, docxDocumentInstance);
-      xmlFragment.import(paragraphFragment);
+      // Create paragraph if:
+      // 1. Node has direct text content, OR
+      // 2. Node is empty (no children) and is a block element, OR
+      // 3. Node has no block children
+      if (
+        hasDirectTextContent(vNode) ||
+        (!vNodeHasChildren(vNode) && ['p', 'div', 'blockquote'].includes(vNode.tagName)) ||
+        !hasBlockChildren(vNode)
+      ) {
+        const paragraphFragment = await xmlBuilder.buildParagraph(vNode, {}, docxDocumentInstance);
+        xmlFragment.import(paragraphFragment);
+      } else if (vNodeHasChildren(vNode)) {
+        // If we have block children, process them
+        // eslint-disable-next-line no-restricted-syntax
+        for (const childVNode of vNode.children) {
+          await convertVTreeToXML(docxDocumentInstance, childVNode, xmlFragment);
+        }
+      }
       return;
 
     case 'figure':
@@ -361,8 +412,12 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
               docxDocumentInstance
             );
             xmlFragment.import(tableFragment);
-            const emptyParagraphFragment = await xmlBuilder.buildParagraph(null, {});
-            xmlFragment.import(emptyParagraphFragment);
+            // Only add empty paragraph if there's more content after the table
+            const hasMoreContent = childVNode !== vNode.children[vNode.children.length - 1];
+            if (hasMoreContent) {
+              const emptyParagraphFragment = await xmlBuilder.buildParagraph(null, {});
+              xmlFragment.import(emptyParagraphFragment);
+            }
           } else if (childVNode.tagName === 'img') {
             const imageFragment = await buildImage(docxDocumentInstance, childVNode);
             if (imageFragment) {
@@ -398,7 +453,12 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
       return;
 
     case 'br':
-      const linebreakFragment = await xmlBuilder.buildParagraph(null, {});
+      // Create a line break within the current paragraph instead of a new paragraph
+      const linebreakFragment = fragment({ namespaceAlias: { w: namespaces.w } })
+        .ele('@w', 'r')
+        .ele('@w', 'br')
+        .up()
+        .up();
       xmlFragment.import(linebreakFragment);
       return;
 

@@ -16,34 +16,34 @@ import sizeOf from 'image-size';
 import VirtualText from 'virtual-dom/vnode/vtext';
 import namespaces from '../namespaces';
 import {
-  rgbToHex,
-  hslToHex,
-  hslRegex,
-  rgbRegex,
-  hexRegex,
   hex3Regex,
   hex3ToHex,
+  hexRegex,
+  hslRegex,
+  hslToHex,
+  rgbRegex,
+  rgbToHex,
 } from '../utils/color-conversion';
 import {
-  pixelToEMU,
-  pixelRegex,
-  TWIPToEMU,
-  percentageRegex,
-  pointRegex,
-  pointToHIP,
   HIPToTWIP,
-  pointToTWIP,
+  percentageRegex,
+  pixelRegex,
+  pixelToEMU,
   pixelToHIP,
   pixelToTWIP,
+  pointRegex,
+  pointToHIP,
+  pointToTWIP,
+  TWIPToEMU,
 } from '../utils/unit-conversion';
 import {
+  colorlessColors,
   defaultFont,
   hyperlinkType,
-  paragraphBordersObject,
-  colorlessColors,
-  verticalAlignValues,
   imageType,
   internalRelationship,
+  paragraphBordersObject,
+  verticalAlignValues,
 } from '../constants';
 import { vNodeHasChildren } from '../utils/vnode';
 import { isValidUrl } from '../utils/url';
@@ -502,7 +502,7 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
       'sub',
       'sup',
       'mark',
-      'blockquote',
+      'a',
       'code',
       'pre',
     ].includes(vNode.tagName)
@@ -713,10 +713,10 @@ const buildRunOrHyperLink = async (vNode, attributes, docxDocumentInstance) => {
     }
 
     if (Array.isArray(runFragments)) {
-      for (let index = 0; index < runFragments.length; index++) {
-        const runFragment = runFragments[index];
+      for (let iteratorIndex = 0; iteratorIndex < runFragments.length; iteratorIndex++) {
+        const runOrHyperlinkFragment = runFragments[iteratorIndex];
 
-        hyperlinkFragment.import(runFragment);
+        hyperlinkFragment.import(runOrHyperlinkFragment);
       }
     } else {
       hyperlinkFragment.import(runFragments);
@@ -986,6 +986,16 @@ const computeImageDimensions = (vNode, attributes) => {
 };
 
 const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
+  // Skip empty text nodes without attributes
+  if (isVText(vNode) && !vNode.text.trim() && !attributes) {
+    return null;
+  }
+
+  // Skip empty nodes without attributes
+  if (!vNode && !attributes) {
+    return null;
+  }
+
   const paragraphFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'p');
   const modifiedAttributes = modifiedStyleAttributesBuilder(
     docxDocumentInstance,
@@ -1020,6 +1030,13 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
     if (style['margin-bottom']) {
       modifiedAttributes.marginBottom = fixupMargin(style['margin-bottom']);
     }
+  }
+
+  // For empty block elements, ensure we have the correct spacing
+  if ((!vNode || !vNodeHasChildren(vNode)) && !attributes.paragraphStyle) {
+    modifiedAttributes.lineSpacing = 0;
+    modifiedAttributes.beforeSpacing = 0;
+    modifiedAttributes.afterSpacing = 0;
   }
 
   const paragraphPropertiesFragment = buildParagraphProperties(modifiedAttributes);
@@ -1059,11 +1076,10 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
           iteratorIndex++
         ) {
           const runOrHyperlinkFragment = runOrHyperlinkFragments[iteratorIndex];
-          if (runOrHyperlinkFragment) {
-            paragraphFragment.import(runOrHyperlinkFragment);
-          }
+
+          paragraphFragment.import(runOrHyperlinkFragment);
         }
-      } else if (runOrHyperlinkFragments) {
+      } else {
         paragraphFragment.import(runOrHyperlinkFragments);
       }
     } else if (vNode.tagName === 'blockquote') {
@@ -1071,6 +1087,7 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
       if (Array.isArray(runFragments)) {
         for (let index = 0; index < runFragments.length; index++) {
           const runFragment = runFragments[index];
+
           paragraphFragment.import(runFragment);
         }
       } else {
@@ -1096,9 +1113,14 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
               break;
             }
           } else {
-            // eslint-disable-next-line no-useless-escape, prefer-destructuring
-            base64String = imageSource.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)[2];
+            base64String = decodeURIComponent(childVNode.properties.src);
+            const match = base64String.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+            if (match) {
+              // eslint-disable-next-line prefer-destructuring
+              base64String = match[2];
+            }
           }
+
           const imageBuffer = Buffer.from(decodeURIComponent(base64String), 'base64');
           const imageProperties = sizeOf(imageBuffer);
 
@@ -1151,8 +1173,12 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
           return paragraphFragment;
         }
       } else {
-        // eslint-disable-next-line no-useless-escape, prefer-destructuring
-        base64String = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/)[2];
+        base64String = decodeURIComponent(vNode.properties.src);
+        const match = base64String.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+        if (match) {
+          // eslint-disable-next-line prefer-destructuring
+          base64String = match[2];
+        }
       }
 
       const imageBuffer = Buffer.from(decodeURIComponent(base64String), 'base64');
@@ -1349,10 +1375,7 @@ const buildTableCell = async function buildTableCell(
   const tableCellProperties = tableCellFragment.ele('@w', 'tcPr');
 
   // Handle cell width
-  tableCellProperties
-    .ele('@w', 'tcW')
-    .att('@w', 'w', colWidthTwips || 0)
-    .att('@w', 'type', 'dxa');
+  tableCellProperties.ele('@w', 'tcW').att('@w', 'w', String(colWidthTwips));
 
   // Handle vertical alignment with proper defaults
   const vAlign = properties?.attributes?.valign;
@@ -1617,7 +1640,7 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
     const tableAttributes = vNode.properties.attributes || {};
     const tableStyles = vNode.properties.style || {};
 
-    // Check if border-style: hidden is set - this takes precedence over border attribute
+    // Check if border-style is hidden - this takes precedence over border attribute
     if (tableStyles['border-style'] === 'hidden') {
       modifiedAttributes.tableBorders = {
         top: 0,
