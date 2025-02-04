@@ -991,8 +991,8 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
     return null;
   }
 
-  // Skip empty nodes without attributes
-  if (!vNode && !attributes) {
+  // Skip empty nodes without attributes, unless it's a spacer paragraph
+  if (!vNode && !attributes.isSpacerParagraph && !attributes) {
     return null;
   }
 
@@ -1006,34 +1006,19 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
     }
   );
 
-  // Check if this is a spacer paragraph
-  if (
-    isVNode(vNode) &&
-    vNode.properties &&
-    vNode.properties.attributes &&
-    vNode.properties.attributes['data-spacing-after']
-  ) {
-    const spacingValue = vNode.properties.attributes['data-spacing-after'];
-    const spacingFragment = buildSpacing(null, null, spacingValue);
-    const paragraphPropertiesFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele(
-      '@w',
-      'pPr'
-    );
-    paragraphPropertiesFragment.import(spacingFragment);
-    paragraphFragment.import(paragraphPropertiesFragment);
-    paragraphFragment.up();
-  }
-
-  // Handle inline styles
-  if (isVNode(vNode) && vNode.properties && vNode.properties.style) {
-    const { style } = vNode.properties;
-    if (style['margin-bottom']) {
-      modifiedAttributes.marginBottom = fixupMargin(style['margin-bottom']);
-    }
+  // For spacer paragraphs, ensure we have minimal spacing
+  if (attributes.isSpacerParagraph) {
+    modifiedAttributes.lineSpacing = 240; // Standard line spacing
+    modifiedAttributes.beforeSpacing = 0;
+    modifiedAttributes.afterSpacing = 0;
   }
 
   // For empty block elements, ensure we have the correct spacing
-  if ((!vNode || !vNodeHasChildren(vNode)) && !attributes.paragraphStyle) {
+  if (
+    (!vNode || !vNodeHasChildren(vNode)) &&
+    !attributes.paragraphStyle &&
+    !attributes.isSpacerParagraph
+  ) {
     modifiedAttributes.lineSpacing = 0;
     modifiedAttributes.beforeSpacing = 0;
     modifiedAttributes.afterSpacing = 0;

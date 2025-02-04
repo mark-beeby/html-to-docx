@@ -344,6 +344,12 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     );
   };
 
+  // Helper function to check if a node has the mb-6 class
+  const hasMb6Class = (node) => {
+    if (!node || !node.properties || !node.properties.className) return false;
+    return node.properties.className.includes('mb-6');
+  };
+
   switch (vNode.tagName) {
     case 'h1':
     case 'h2':
@@ -389,6 +395,16 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
       ) {
         const paragraphFragment = await xmlBuilder.buildParagraph(vNode, {}, docxDocumentInstance);
         xmlFragment.import(paragraphFragment);
+
+        // Add empty paragraph after block elements with mb-6 class
+        if (hasMb6Class(vNode)) {
+          const spacerParagraph = await xmlBuilder.buildParagraph(
+            null,
+            { isSpacerParagraph: true },
+            docxDocumentInstance
+          );
+          xmlFragment.import(spacerParagraph);
+        }
       } else if (vNodeHasChildren(vNode)) {
         // If we have block children, process them
         // eslint-disable-next-line no-restricted-syntax
