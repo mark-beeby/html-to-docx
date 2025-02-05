@@ -844,6 +844,9 @@ const buildParagraphProperties = (attributes) => {
   );
   if (attributes && attributes.constructor === Object) {
     Object.keys(attributes).forEach((key) => {
+      if (typeof attributes[key] === 'undefined' && !attributes[key]) {
+        return;
+      }
       switch (key) {
         case 'numbering':
           const { levelId, numberingId } = attributes[key];
