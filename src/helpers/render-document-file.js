@@ -88,7 +88,22 @@ export const buildImage = async (docxDocumentInstance, vNode, maximumWidth = nul
 };
 
 export const buildList = async (vNode, docxDocumentInstance, xmlFragment) => {
-  const listElements = [];
+  // For lists, we want to remove any empty paragraphs that were added before
+  const { lastChild } = xmlFragment.node;
+  if (lastChild && lastChild.nodeName === 'w:p') {
+    const textNodes = lastChild.getElementsByTagName('w:t');
+    let hasText = false;
+    // eslint-disable-next-line no-plusplus
+    for (let i = 0; i < textNodes.length; i++) {
+      if (textNodes[i].textContent.trim()) {
+        hasText = true;
+        break;
+      }
+    }
+    if (!hasText) {
+      xmlFragment.node.removeChild(lastChild);
+    }
+  }
 
   let vNodeObjects = [
     {
@@ -178,7 +193,7 @@ export const buildList = async (vNode, docxDocumentInstance, xmlFragment) => {
     }
   }
 
-  return listElements;
+  return xmlFragment;
 };
 
 export async function convertVTreeToXML(docxDocumentInstance, vTree, xmlFragment) {
@@ -276,10 +291,12 @@ export async function convertVTreeToXML(docxDocumentInstance, vTree, xmlFragment
     // eslint-disable-next-line no-use-before-define
     await findXMLEquivalent(docxDocumentInstance, vTree, xmlFragment);
   } else if (isVText(vTree)) {
-    // Only create a paragraph for text nodes that have actual content
+    // Only create paragraphs for text nodes that have meaningful content
     if (vTree.text.trim()) {
       const paragraphFragment = await xmlBuilder.buildParagraph(vTree, {}, docxDocumentInstance);
-      xmlFragment.import(paragraphFragment);
+      if (paragraphFragment) {
+        xmlFragment.import(paragraphFragment);
+      }
     }
   }
   return xmlFragment;
@@ -344,13 +361,73 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     );
   };
 
-  // Helper function to check if a node has the mb-6 class
-  const hasMb6Class = (node) => {
-    if (!node || !node.properties || !node.properties.className) return false;
-    return node.properties.className.includes('mb-6');
-  };
-
   switch (vNode.tagName) {
+    case 'div':
+      // First process div's children
+      // eslint-disable-next-line no-restricted-syntax
+      for (const child of vNode.children || []) {
+        await findXMLEquivalent(docxDocumentInstance, child, xmlFragment);
+      }
+
+      // Check for data-spacing-after attribute
+      const spacingAfter = vNode.properties?.attributes?.['data-spacing-after'];
+      if (spacingAfter) {
+        const spacingParagraph = fragment({ namespaceAlias: { w: namespaces.w } })
+          .ele('@w', 'p')
+          .ele('@w', 'pPr')
+          .ele('@w', 'spacing')
+          .att('@w', 'after', spacingAfter)
+          .att('@w', 'before', '0')
+          .att('@w', 'line', '240')
+          .att('@w', 'lineRule', 'auto')
+          .up()
+          .up()
+          .up();
+        xmlFragment.import(spacingParagraph);
+      }
+      return;
+
+    case 'ul':
+    case 'ol':
+      await buildList(vNode, docxDocumentInstance, xmlFragment);
+      return;
+
+    case 'p':
+      // Check for spacing attribute even if empty
+      const pSpacingAfter = vNode.properties?.attributes?.['data-spacing-after'];
+      if (pSpacingAfter) {
+        const spacingParagraph = fragment({ namespaceAlias: { w: namespaces.w } })
+          .ele('@w', 'p')
+          .ele('@w', 'pPr')
+          .ele('@w', 'spacing')
+          .att('@w', 'after', pSpacingAfter)
+          .att('@w', 'before', '0')
+          .att('@w', 'line', '240')
+          .att('@w', 'lineRule', 'auto')
+          .up()
+          .up()
+          .up();
+        xmlFragment.import(spacingParagraph);
+        return;
+      }
+
+      // Check if this is a regular paragraph with content
+      const hasContent = vNode.children?.some(
+        (child) =>
+          (isVText(child) && child.text.trim()) ||
+          (isVNode(child) && !['ul', 'ol'].includes(child.tagName))
+      );
+
+      // Skip empty paragraphs unless they have spacing
+      if (!hasContent && !vNode.properties?.attributes?.['data-spacing-after']) {
+        return;
+      }
+
+      // Process it normally
+      const paragraphFragment = await xmlBuilder.buildParagraph(vNode, {}, docxDocumentInstance);
+      xmlFragment.import(paragraphFragment);
+      return;
+
     case 'h1':
     case 'h2':
     case 'h3':
@@ -378,8 +455,6 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     case 'sub':
     case 'sup':
     case 'mark':
-    case 'p':
-    case 'div':
     case 'a':
     case 'blockquote':
     case 'code':
@@ -393,11 +468,12 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
         (!vNodeHasChildren(vNode) && ['p', 'div', 'blockquote'].includes(vNode.tagName)) ||
         !hasBlockChildren(vNode)
       ) {
+        // eslint-disable-next-line no-shadow
         const paragraphFragment = await xmlBuilder.buildParagraph(vNode, {}, docxDocumentInstance);
         xmlFragment.import(paragraphFragment);
 
         // Add empty paragraph after block elements with mb-6 class
-        if (hasMb6Class(vNode)) {
+        if (vNode.properties?.attributes?.class?.includes('mb-6')) {
           const spacerParagraph = await xmlBuilder.buildParagraph(
             null,
             { isSpacerParagraph: true },
@@ -456,11 +532,6 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
       xmlFragment.import(tableFragment);
       return;
 
-    case 'ul':
-    case 'ol':
-      await buildList(vNode, docxDocumentInstance, xmlFragment);
-      return;
-
     case 'img':
       const imageFragment = await buildImage(docxDocumentInstance, vNode);
       if (imageFragment) {
@@ -471,8 +542,8 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     case 'br':
       // Create a line break within the current paragraph instead of a new paragraph
       const linebreakFragment = fragment({ namespaceAlias: { w: namespaces.w } })
-        .ele('@w', 'r')
-        .ele('@w', 'br')
+        .ele('w:r')
+        .ele('w:br')
         .up()
         .up();
       xmlFragment.import(linebreakFragment);
