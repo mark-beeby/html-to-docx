@@ -1479,6 +1479,7 @@ const buildTableCell = async function buildTableCell(
     });
   }
 
+  let hasContent = false;
   if (vNodeHasChildren(column)) {
     // Create a paragraph for the cell content with alignment
     const paragraph = tableCellFragment.ele('@w', 'p');
@@ -1502,20 +1503,26 @@ const buildTableCell = async function buildTableCell(
     for (const child of column.children) {
       if (isVText(child)) {
         // Handle text nodes directly
-        const run = paragraph.ele('@w', 'r');
-        run.ele('@w', 'rPr');
-        run
-          .ele('@w', 't')
-          .att('xml:space', 'preserve')
-          .txt(child.text || '');
+        if (!hasContent) {
+          const run = paragraph.ele('@w', 'r');
+          run.ele('@w', 'rPr');
+          run
+            .ele('@w', 't')
+            .att('xml:space', 'preserve')
+            .txt(child.text || '');
+          hasContent = true;
+        }
       } else if (child.type === 'text') {
         // Handle text nodes (non-VText)
-        const run = paragraph.ele('@w', 'r');
-        run.ele('@w', 'rPr');
-        run
-          .ele('@w', 't')
-          .att('xml:space', 'preserve')
-          .txt(child.value || '');
+        if (!hasContent) {
+          const run = paragraph.ele('@w', 'r');
+          run.ele('@w', 'rPr');
+          run
+            .ele('@w', 't')
+            .att('xml:space', 'preserve')
+            .txt(child.value || '');
+          hasContent = true;
+        }
       } else if (isVNode(child)) {
         if (child.tagName === 'td' || child.tagName === 'th') {
           // Skip nested table cells
@@ -1534,11 +1541,17 @@ const buildTableCell = async function buildTableCell(
         );
         if (renderedElement) {
           tableCellFragment.import(renderedElement);
+          hasContent = true;
         }
       }
     }
+
+    // Only add an empty paragraph if we haven't added any content
+    if (!hasContent) {
+      tableCellFragment.ele('@w', 'p');
+    }
   } else {
-    // Add an empty paragraph for empty cells
+    // Add an empty paragraph for truly empty cells
     tableCellFragment.ele('@w', 'p');
   }
 

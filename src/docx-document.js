@@ -468,7 +468,9 @@ class DocxDocument {
           .att(
             '@w',
             'val',
-            type === 'ol' ? this.ListStyleBuilder.getListPrefixSuffix(properties.style, level) : '•'
+            type === 'ol'
+              ? this.ListStyleBuilder.getListPrefixSuffix(properties.style, level)
+              : '\uF0B7'
           )
           .up()
           .ele('@w', 'lvlJc')
@@ -495,8 +497,8 @@ class DocxDocument {
         if (type === 'ul') {
           rPrFragment
             .ele('@w', 'rFonts')
-            .att('@w', 'ascii', 'Wingdings')
-            .att('@w', 'hAnsi', 'Wingdings')
+            .att('@w', 'ascii', 'Symbol')
+            .att('@w', 'hAnsi', 'Symbol')
             .att('@w', 'hint', 'default')
             .up();
         }
