@@ -110,7 +110,13 @@ export const buildList = async (vNode, docxDocumentInstance, xmlFragment) => {
       node: vNode,
       level: 0,
       type: vNode.tagName,
-      numberingId: docxDocumentInstance.createNumbering(vNode.tagName, vNode.properties),
+      numberingId: docxDocumentInstance.createNumbering(vNode.tagName, {
+        ...vNode.properties,
+        style: {
+          ...vNode.properties?.style,
+          primaryColour: vNode.properties?.attributes?.['data-primary-colour'],
+        },
+      }),
     },
   ];
   while (vNodeObjects.length) {
@@ -360,7 +366,7 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
         ].includes(child.tagName)
     );
   };
-
+  const spacingAfter = vNode.properties?.attributes?.['data-spacing-after'];
   switch (vNode.tagName) {
     case 'div':
       // First process div's children
@@ -370,7 +376,6 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
       }
 
       // Check for data-spacing-after attribute
-      const spacingAfter = vNode.properties?.attributes?.['data-spacing-after'];
       if (spacingAfter) {
         const spacingParagraph = fragment({ namespaceAlias: { w: namespaces.w } })
           .ele('@w', 'p')
@@ -394,13 +399,12 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
 
     case 'p':
       // Check for spacing attribute even if empty
-      const pSpacingAfter = vNode.properties?.attributes?.['data-spacing-after'];
-      if (pSpacingAfter) {
+      if (spacingAfter) {
         const spacingParagraph = fragment({ namespaceAlias: { w: namespaces.w } })
           .ele('@w', 'p')
           .ele('@w', 'pPr')
           .ele('@w', 'spacing')
-          .att('@w', 'after', pSpacingAfter)
+          .att('@w', 'after', spacingAfter)
           .att('@w', 'before', '0')
           .att('@w', 'line', '240')
           .att('@w', 'lineRule', 'auto')

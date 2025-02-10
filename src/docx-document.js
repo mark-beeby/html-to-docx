@@ -468,7 +468,7 @@ class DocxDocument {
           .att(
             '@w',
             'val',
-            type === 'ol' ? this.ListStyleBuilder.getListPrefixSuffix(properties.style, level) : ''
+            type === 'ol' ? this.ListStyleBuilder.getListPrefixSuffix(properties.style, level) : '•'
           )
           .up()
           .ele('@w', 'lvlJc')
@@ -488,18 +488,27 @@ class DocxDocument {
           .up()
           .up();
 
+        // Create rPr fragment for both ul and ol
+        const rPrFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'rPr');
+
+        // Add font settings based on list type
         if (type === 'ul') {
-          levelFragment.last().import(
-            fragment({ namespaceAlias: { w: namespaces.w } })
-              .ele('@w', 'rPr')
-              .ele('@w', 'rFonts')
-              .att('@w', 'ascii', 'Symbol')
-              .att('@w', 'hAnsi', 'Symbol')
-              .att('@w', 'hint', 'default')
-              .up()
-              .up()
-          );
+          rPrFragment
+            .ele('@w', 'rFonts')
+            .att('@w', 'ascii', 'Wingdings')
+            .att('@w', 'hAnsi', 'Wingdings')
+            .att('@w', 'hint', 'default')
+            .up();
         }
+
+        // Add color if specified in properties (for both ul and ol)
+        if (properties.style && properties.style.primaryColour) {
+          rPrFragment
+            .ele('@w', 'color')
+            .att('@w', 'val', properties.style.primaryColour.replace('#', ''));
+        }
+
+        levelFragment.last().import(rPrFragment);
         abstractNumberingFragment.import(levelFragment);
       });
       abstractNumberingFragment.up();
@@ -553,7 +562,21 @@ class DocxDocument {
 
   createNumbering(type, properties) {
     this.lastNumberingId += 1;
-    this.numberingObjects.push({ numberingId: this.lastNumberingId, type, properties });
+
+    // Ensure style object exists and contains colour if specified
+    const style = properties?.style || {};
+    if (properties?.primaryColour && !style.primaryColour) {
+      style.primaryColour = properties.primaryColour;
+    }
+
+    this.numberingObjects.push({
+      numberingId: this.lastNumberingId,
+      type,
+      properties: {
+        ...properties,
+        style,
+      },
+    });
 
     return this.lastNumberingId;
   }
@@ -765,7 +788,6 @@ class DocxDocument {
       /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">.*?<w:t\b[^>]*>.*?<\/w:t>/g;
     const multiLineParagraphRegex =
       /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">.*?<w:br\/>/g;
-    const tableRegex = /<w:tbl>/g;
     const tableRowRegex = /<w:tr>/g;
     const imageRegex = /<wp:drawing>/g;
     const textContentRegex = /<w:t\b[^>]*>([^<]+)<\/w:t>/g;
@@ -774,7 +796,7 @@ class DocxDocument {
     const paragraphs = (xmlString.match(paragraphRegex) || []).length;
     const nonEmptyParagraphs = (xmlString.match(nonEmptyParagraphRegex) || []).length;
     const multiLineParagraphs = (xmlString.match(multiLineParagraphRegex) || []).length;
-    const tables = (xmlString.match(tableRegex) || []).length;
+    // const tables = (xmlString.match(tableRegex) || []).length;
     const tableRows = (xmlString.match(tableRowRegex) || []).length;
     const images = (xmlString.match(imageRegex) || []).length;
 
@@ -976,6 +998,7 @@ class DocxDocument {
     }
   }
 
+  // eslint-disable-next-line consistent-return
   async getImageHeight(image) {
     const { url, width, height } = image;
 
@@ -1071,12 +1094,14 @@ class DocxDocument {
       const rightOffset = pageWidthEMU - widthEMU - 180000; // 1 cm gap from the right edge
       // eslint-disable-next-line no-nested-ternary
       const posOffset =
+        // eslint-disable-next-line no-nested-ternary
         alignment === 'center' ? centerOffset : alignment === 'right' ? rightOffset : leftOffset;
 
       // Create the run with the drawing
       const run = lastParagraph.ele('@w', 'r');
 
       // Create the drawing with anchor
+      // eslint-disable-next-line no-unused-vars
       const drawing = run
         .ele('@w', 'drawing')
         .ele('@wp', 'anchor')

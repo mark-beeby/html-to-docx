@@ -1479,35 +1479,43 @@ const buildTableCell = async function buildTableCell(
     });
   }
 
-  let hasContent = false;
   if (vNodeHasChildren(column)) {
+    // Create a paragraph for the cell content with alignment
+    const paragraph = tableCellFragment.ele('@w', 'p');
+    const pPr = paragraph.ele('@w', 'pPr');
+
+    // Add spacing
+    pPr
+      .ele('@w', 'spacing')
+      .att('@w', 'line', '240')
+      .att('@w', 'lineRule', 'auto')
+      .att('@w', 'before', '0')
+      .att('@w', 'after', '0');
+
+    // Add text alignment if specified
+    if (properties?.style?.['text-align']) {
+      pPr.ele('@w', 'jc').att('@w', 'val', properties.style['text-align']);
+    }
+
     // Process cell content
     // eslint-disable-next-line no-restricted-syntax
     for (const child of column.children) {
       if (isVText(child)) {
         // Handle text nodes directly
-        if (!hasContent) {
-          const paragraph = tableCellFragment.ele('@w', 'p');
-          const run = paragraph.ele('@w', 'r');
-          run.ele('@w', 'rPr');
-          run
-            .ele('@w', 't')
-            .att('xml:space', 'preserve')
-            .txt(child.text || '');
-          hasContent = true;
-        }
+        const run = paragraph.ele('@w', 'r');
+        run.ele('@w', 'rPr');
+        run
+          .ele('@w', 't')
+          .att('xml:space', 'preserve')
+          .txt(child.text || '');
       } else if (child.type === 'text') {
         // Handle text nodes (non-VText)
-        if (!hasContent) {
-          const paragraph = tableCellFragment.ele('@w', 'p');
-          const run = paragraph.ele('@w', 'r');
-          run.ele('@w', 'rPr');
-          run
-            .ele('@w', 't')
-            .att('xml:space', 'preserve')
-            .txt(child.value || '');
-          hasContent = true;
-        }
+        const run = paragraph.ele('@w', 'r');
+        run.ele('@w', 'rPr');
+        run
+          .ele('@w', 't')
+          .att('xml:space', 'preserve')
+          .txt(child.value || '');
       } else if (isVNode(child)) {
         if (child.tagName === 'td' || child.tagName === 'th') {
           // Skip nested table cells
@@ -1526,17 +1534,11 @@ const buildTableCell = async function buildTableCell(
         );
         if (renderedElement) {
           tableCellFragment.import(renderedElement);
-          hasContent = true;
         }
       }
     }
-
-    // Only add an empty paragraph if we haven't added any content
-    if (!hasContent) {
-      tableCellFragment.ele('@w', 'p');
-    }
   } else {
-    // Add an empty paragraph for truly empty cells
+    // Add an empty paragraph for empty cells
     tableCellFragment.ele('@w', 'p');
   }
 
