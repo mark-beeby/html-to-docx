@@ -2118,62 +2118,6 @@ const buildDrawing = (inlineOrAnchored = false, graphicType, attributes) => {
   return drawingFragment;
 };
 
-const buildList = async (vNode, docxDocumentInstance, xmlFragment) => {
-  // Add debug marker for list building
-  const debugFragment = fragment({ namespaceAlias: { w: namespaces.w } })
-    .ele('w:p')
-    .ele('w:r')
-    .ele('w:rPr')
-    .ele('w:color')
-    .att('w:val', 'FF8800')
-    .up()
-    .up()
-    .ele('w:t')
-    .txt('[Debug: buildList Start]')
-    .up()
-    .up();
-  xmlFragment.import(debugFragment);
-
-  // Build list items
-  const listItems = vNode.children;
-  const listType = vNode.tagName === 'ol' ? 'ordered' : 'unordered';
-  const listLevel = vNode.properties && vNode.properties.level ? vNode.properties.level : 0;
-  const numberingId = docxDocumentInstance.createNumberingId(listType, listLevel);
-  const levelId = docxDocumentInstance.createLevelId(listType, listLevel);
-
-  for (let index = 0; index < listItems.length; index++) {
-    const listItem = listItems[index];
-    const paragraphFragment = await buildParagraph(
-      listItem,
-      {
-        numbering: {
-          numberingId,
-          levelId,
-        },
-      },
-      docxDocumentInstance
-    );
-    xmlFragment.import(paragraphFragment);
-  }
-
-  // Add debug marker for list building
-  const debugFragmentEnd = fragment({ namespaceAlias: { w: namespaces.w } })
-    .ele('w:p')
-    .ele('w:r')
-    .ele('w:rPr')
-    .ele('w:color')
-    .att('w:val', 'FF8800')
-    .up()
-    .up()
-    .ele('w:t')
-    .txt('[Debug: buildList End]')
-    .up()
-    .up();
-  xmlFragment.import(debugFragmentEnd);
-
-  return xmlFragment;
-};
-
 export {
   buildParagraph,
   buildTable,
@@ -2187,5 +2131,4 @@ export {
   buildUnderline,
   buildDrawing,
   fixupLineHeight,
-  buildList,
 };

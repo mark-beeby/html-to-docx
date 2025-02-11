@@ -13,8 +13,8 @@ import mimeTypes from 'mime-types';
 
 // FIXME: remove the cyclic dependency
 // eslint-disable-next-line import/no-cycle
-// eslint-disable-next-line import/no-cycle
 import * as xmlBuilder from './xml-builder';
+// eslint-disable-next-line import/no-cycle
 import { buildTableRow } from './xml-builder';
 import namespaces from '../namespaces';
 import { imageType, internalRelationship } from '../constants';
@@ -111,10 +111,11 @@ export const buildList = async (vNode, docxDocumentInstance, xmlFragment) => {
       level: 0,
       type: vNode.tagName,
       numberingId: docxDocumentInstance.createNumbering(vNode.tagName, {
-        ...vNode.properties,
+        level: 0,
         style: {
           ...vNode.properties?.style,
-          primaryColour: vNode.properties?.attributes?.['data-primary-colour'],
+          primaryColour:
+            vNode.properties?.attributes?.['data-primary-colour'] || vNode.properties?.style?.color,
         },
       }),
     },
@@ -148,10 +149,15 @@ export const buildList = async (vNode, docxDocumentInstance, xmlFragment) => {
             node: childVNode,
             level: tempVNodeObject.level + 1,
             type: childVNode.tagName,
-            numberingId: docxDocumentInstance.createNumbering(
-              childVNode.tagName,
-              childVNode.properties
-            ),
+            numberingId: docxDocumentInstance.createNumbering(childVNode.tagName, {
+              level: tempVNodeObject.level + 1,
+              style: {
+                ...childVNode.properties?.style,
+                primaryColour:
+                  childVNode.properties?.attributes?.['data-primary-colour'] ||
+                  childVNode.properties?.style?.color,
+              },
+            }),
           });
         } else {
           // eslint-disable-next-line no-lonely-if
