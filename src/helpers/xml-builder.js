@@ -1353,6 +1353,7 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
   // Process each column
   // eslint-disable-next-line no-restricted-syntax
   for (const column of columns) {
+    const colspan = parseInt(column.properties?.colSpan || '1', 10);
     const colWidth = parseInt(column.properties?.attributes?.['data-docx-column'] || '1', 10);
     const totalPadding = columns.length * 200;
     const colWidthTwips =
@@ -1397,6 +1398,10 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
       .ele('@w', 'tcW')
       .att('@w', 'w', colWidthTwips.toString())
       .att('@w', 'type', 'dxa')
+      .up()
+      // Add gridSpan here for colspan support
+      .ele('@w', 'gridSpan')
+      .att('@w', 'val', colspan.toString())
       .up()
       .ele('@w', 'vAlign')
       .att('@w', 'val', cssOrValignAlignment)

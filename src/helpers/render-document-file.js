@@ -421,18 +421,6 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
         return;
       }
 
-      // Check if this is a regular paragraph with content
-      const hasContent = vNode.children?.some(
-        (child) =>
-          (isVText(child) && child.text.trim()) ||
-          (isVNode(child) && !['ul', 'ol'].includes(child.tagName))
-      );
-
-      // Skip empty paragraphs unless they have spacing
-      if (!hasContent && !vNode.properties?.attributes?.['data-spacing-after']) {
-        return;
-      }
-
       // Process it normally
       const paragraphFragment = await xmlBuilder.buildParagraph(vNode, {}, docxDocumentInstance);
       xmlFragment.import(paragraphFragment);
