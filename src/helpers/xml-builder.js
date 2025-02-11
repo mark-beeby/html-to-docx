@@ -36,6 +36,8 @@ import {
   pointToTWIP,
   TWIPToEMU,
 } from '../utils/unit-conversion';
+// eslint-disable-next-line import/no-cycle
+import { convertVTreeToXML } from './render-document-file';
 import {
   colorlessColors,
   defaultFont,
@@ -502,7 +504,7 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
       'sub',
       'sup',
       'mark',
-      'a',
+      'blockquote',
       'code',
       'pre',
     ].includes(vNode.tagName)
@@ -1355,207 +1357,102 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
     const totalPadding = columns.length * 200;
     const colWidthTwips =
       Math.floor((colWidth / 12) * docxDocumentInstance.availableDocumentSpace) - totalPadding;
+    const tableCellFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tc');
+    const align = column.properties?.style?.['text-align'];
+    const vAlign = column.properties?.attributes?.valign;
+    const cssVAlign = column.properties?.style?.['vertical-align'];
+    let cellBgOverride = column.properties?.style?.['background-color'] || false;
 
-    // eslint-disable-next-line no-use-before-define
-    const tableCellFragment = await buildTableCell(
-      column,
-      colWidthTwips,
-      docxDocumentInstance,
-      attributes
-    );
-    tableRowFragment.import(tableCellFragment);
-  }
+    if (cellBgOverride) {
+      // Convert RGB to hex if necessary
+      if (cellBgOverride.startsWith('rgb')) {
+        const rgb = cellBgOverride.match(/\d+/g);
+        if (rgb && rgb.length === 3) {
+          cellBgOverride = rgbToHex(parseInt(rgb[0]), parseInt(rgb[1]), parseInt(rgb[2]));
+        }
+      }
+      // Remove '#' if present
+      cellBgOverride = cellBgOverride.replace('#', '');
+    }
 
-  return tableRowFragment;
-};
+    // eslint-disable-next-line no-nested-ternary
+    const cssOrValignAlignment = cssVAlign
+      ? cssVerticalAlignMapping[cssVAlign] || 'center'
+      : vAlign
+      ? valignMapping[vAlign] || 'center'
+      : 'center';
 
-const buildTableCell = async function buildTableCell(
-  column,
-  colWidthTwips,
-  docxDocumentInstance,
-  attributes
-) {
-  const tableCellFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tc');
-  const properties = column.properties || {};
-  const styles = properties.style || {};
-
-  const tableCellProperties = tableCellFragment.ele('@w', 'tcPr');
-
-  // Handle cell width
-  tableCellProperties.ele('@w', 'tcW').att('@w', 'w', String(colWidthTwips));
-
-  // Handle vertical alignment with proper defaults
-  const vAlign = properties?.attributes?.valign;
-  const cssVAlign = styles['vertical-align'];
-  let verticalAlignment;
-
-  if (cssVAlign) {
-    // Use CSS vertical-align if specified
-    verticalAlignment = cssVerticalAlignMapping[cssVAlign] || 'center';
-  } else if (vAlign) {
-    // Fallback to HTML valign attribute if specified
-    verticalAlignment = valignMapping[vAlign] || 'center';
-  } else {
-    // Default to center (middle) alignment
-    verticalAlignment = 'center';
-  }
-
-  tableCellProperties.ele('@w', 'vAlign').att('@w', 'val', verticalAlignment);
-
-  // Handle cell borders - if border-style is hidden, we need to explicitly set no borders
-  if (styles['border-style'] === 'hidden') {
-    const tcBorders = tableCellProperties.ele('@w', 'tcBorders');
-
-    ['top', 'left', 'bottom', 'right'].forEach((side) => {
-      tcBorders
-        .ele('@w', side)
-        .att('@w', 'val', 'none')
-        .att('@w', 'sz', '0')
-        .att('@w', 'color', 'auto');
-    });
-
-    if (
-      (attributes.tableBorders && attributes.tableBorders.insideH) ||
-      attributes.tableBorders.insideV
-    ) {
-      ['insideH', 'insideV'].forEach((side) => {
-        if (attributes.tableBorders[side]) {
-          tcBorders
-            .ele('@w', side)
-            .att('@w', 'val', attributes.tableBorders.stroke)
-            .att('@w', 'sz', attributes.tableBorders[side] * 8)
-            .att('@w', 'color', attributes.tableBorders.color);
+    if (align) {
+      column.children.forEach((child) => {
+        if (!child.properties?.style?.['text-align']) {
+          child.properties = child.properties || {};
+          child.properties.style = child.properties.style || {};
+          child.properties.style['text-align'] = column.properties.style['text-align'];
         }
       });
     }
-  }
+    // Set up column width
+    tableCellFragment
+      .ele('@w', 'tcPr')
+      .ele('@w', 'tcW')
+      .att('@w', 'w', colWidthTwips.toString())
+      .att('@w', 'type', 'dxa')
+      .up()
+      .ele('@w', 'vAlign')
+      .att('@w', 'val', cssOrValignAlignment)
+      .up()
+      .ele('@w', 'tcMar')
+      .ele('@w', 'top')
+      .att('@w', 'w', '0')
+      .att('@w', 'type', 'dxa')
+      .up()
+      .ele('@w', 'left')
+      .att('@w', 'w', '100')
+      .att('@w', 'type', 'dxa')
+      .up()
+      .ele('@w', 'bottom')
+      .att('@w', 'w', '0')
+      .att('@w', 'type', 'dxa')
+      .up()
+      .ele('@w', 'right')
+      .att('@w', 'w', '100')
+      .att('@w', 'type', 'dxa')
+      .up();
 
-  // Handle cell margins
-  const cellMargins = tableCellProperties.ele('@w', 'tcMar');
-
-  ['top', 'left', 'bottom', 'right'].forEach((direction) => {
-    cellMargins
-      .ele('@w', direction)
-      .att(
-        '@w',
-        'w',
-        attributes[`cellMargin${direction.charAt(0).toUpperCase()}${direction.slice(1)}`] || 0
-      )
-      .att('@w', 'type', 'dxa');
-  });
-
-  // Handle background color
-  let cellBgOverride = properties?.style?.['background-color'] || false;
-  if (cellBgOverride) {
-    // Convert RGB to hex if necessary
-    if (cellBgOverride.startsWith('rgb')) {
-      const rgb = cellBgOverride.match(/\d+/g);
-      if (rgb && rgb.length === 3) {
-        cellBgOverride = rgbToHex(parseInt(rgb[0]), parseInt(rgb[1]), parseInt(rgb[2]));
-      }
-    }
-    // Remove '#' if present
-    cellBgOverride = cellBgOverride.replace('#', '');
-
-    tableCellProperties
-      .ele('@w', 'shd')
-      .att('@w', 'val', 'clear')
-      .att('@w', 'fill', cellBgOverride.toUpperCase());
-  } else if (attributes.backgroundColor) {
-    tableCellProperties
-      .ele('@w', 'shd')
-      .att('@w', 'val', 'clear')
-      .att('@w', 'fill', attributes.backgroundColor.toUpperCase());
-  }
-
-  // Handle text alignment
-  if (styles['text-align']) {
-    column.children.forEach((child) => {
-      if (!child.properties?.style?.['text-align']) {
-        child.properties = child.properties || {};
-        child.properties.style = child.properties.style || {};
-        child.properties.style['text-align'] = properties.style['text-align'];
-      }
-    });
-  }
-
-  let hasContent = false;
-  if (vNodeHasChildren(column)) {
-    // Create a paragraph for the cell content with alignment
-    const paragraph = tableCellFragment.ele('@w', 'p');
-    const pPr = paragraph.ele('@w', 'pPr');
-
-    // Add spacing
-    pPr
-      .ele('@w', 'spacing')
-      .att('@w', 'line', '240')
-      .att('@w', 'lineRule', 'auto')
-      .att('@w', 'before', '0')
-      .att('@w', 'after', '0');
-
-    // Add text alignment if specified
-    if (properties?.style?.['text-align']) {
-      pPr.ele('@w', 'jc').att('@w', 'val', properties.style['text-align']);
+    if (cellBgOverride || attributes.backgroundColor) {
+      const bgColour = cellBgOverride || attributes.backgroundColor;
+      tableCellFragment
+        .first()
+        .ele('@w', 'shd')
+        .att('@w', 'val', 'clear')
+        .att('@w', 'fill', bgColour.toUpperCase())
+        .up();
     }
 
-    // Process cell content
+    tableCellFragment.up();
+
+    // Import cell content
+    await convertVTreeToXML(docxDocumentInstance, column.children, tableCellFragment);
+
+    // Handle nested tables recursively
     // eslint-disable-next-line no-restricted-syntax
     for (const child of column.children) {
-      if (isVText(child)) {
-        // Handle text nodes directly
-        if (!hasContent) {
-          const run = paragraph.ele('@w', 'r');
-          run.ele('@w', 'rPr');
-          run
-            .ele('@w', 't')
-            .att('xml:space', 'preserve')
-            .txt(child.text || '');
-          hasContent = true;
-        }
-      } else if (child.type === 'text') {
-        // Handle text nodes (non-VText)
-        if (!hasContent) {
-          const run = paragraph.ele('@w', 'r');
-          run.ele('@w', 'rPr');
-          run
-            .ele('@w', 't')
-            .att('xml:space', 'preserve')
-            .txt(child.value || '');
-          hasContent = true;
-        }
-      } else if (isVNode(child)) {
-        if (child.tagName === 'td' || child.tagName === 'th') {
-          // Skip nested table cells
-          // eslint-disable-next-line no-continue
-          continue;
-        }
-
-        // Handle other HTML elements
-        const renderedElement = await buildParagraph(
+      if (isVNode(child) && child.tagName === 'table') {
+        const nestedTableFragment = await resizeNestedTable(
           child,
-          {
-            textAlign: styles['text-align'],
-            verticalAlign: verticalAlignment,
-          },
+          colWidthTwips,
           docxDocumentInstance
         );
-        if (renderedElement) {
-          tableCellFragment.import(renderedElement);
-          hasContent = true;
-        }
+        tableCellFragment.import(nestedTableFragment);
       }
     }
 
-    // Only add an empty paragraph if we haven't added any content
-    if (!hasContent) {
-      tableCellFragment.ele('@w', 'p');
-    }
-  } else {
-    // Add an empty paragraph for truly empty cells
-    tableCellFragment.ele('@w', 'p');
+    tableCellFragment.up(); // Close the table cell fragment
+    tableRowFragment.import(tableCellFragment);
   }
 
-  return tableCellFragment;
+  tableRowFragment.up(); // Close the table row fragment
+  return tableRowFragment;
 };
 
 const buildTableGridCol = (gridWidth) =>
