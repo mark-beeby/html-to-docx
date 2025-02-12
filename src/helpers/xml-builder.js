@@ -647,7 +647,7 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
     const imageFragment = buildDrawing(inlineOrAnchored, type, otherAttributes);
     runFragment.import(imageFragment);
   } else if (isVNode(vNode) && vNode.tagName === 'br') {
-    const lineBreakFragment = buildLineBreak();
+    const lineBreakFragment = buildLineBreak('line');
     runFragment.import(lineBreakFragment);
   }
   runFragment.up();
