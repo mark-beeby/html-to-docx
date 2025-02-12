@@ -1469,7 +1469,7 @@ const buildTableGrid = (vNode, attributes) => {
   const tableGridFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tblGrid');
   if (vNodeHasChildren(vNode)) {
     const gridColumns = vNode.children.filter((childVNode) => childVNode.tagName === 'col');
-    const gridWidth = attributes.maximumWidth / gridColumns.length;
+    const gridWidth = (attributes.width || attributes.maximumWidth) / gridColumns.length;
 
     for (let index = 0; index < gridColumns.length; index++) {
       const tableGridColFragment = buildTableGridCol(gridWidth);
@@ -1482,15 +1482,17 @@ const buildTableGrid = (vNode, attributes) => {
 };
 
 const buildTableProperties = (attributes) => {
-  const { maximumWidth } = attributes;
+  const { maximumWidth, width, jc } = attributes;
   const tableFragment = fragment({ namespaceAlias: { w: namespaces.w } });
   const tableProperties = tableFragment.ele('@w', 'tblPr');
-
-  if (maximumWidth) {
+  if (width || maximumWidth) {
     tableProperties
       .ele('@w', 'tblW')
-      .att('@w', 'w', Math.round((maximumWidth / 100) * 5000))
-      .att('@w', 'type', 'pct');
+      .att('@w', 'w', Math.round(((width || maximumWidth) / 100) * 5000))
+      .att('@w', 'type', 'dxa');
+  }
+  if (jc) {
+    tableProperties.ele('@w', 'jc').att('@w', 'val', jc);
   }
 
   // Add table borders if present
@@ -1619,6 +1621,17 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
       }
     }
 
+    const {
+      margin: tblMargin,
+      'margin-left': tblMarginLeft,
+      'margin-right': tblMarginRight,
+    } = tableStyles;
+    if (
+      (tblMargin && tblMargin === 'auto') ||
+      (tblMarginLeft && tblMarginLeft === 'auto' && tblMarginRight && tblMarginRight === 'auto')
+    ) {
+      modifiedAttributes.jc = 'center';
+    }
     if (tableStyles['max-width']) {
       if (pixelRegex.test(tableStyles['max-width'])) {
         pixelRegex.lastIndex = 0;
@@ -1629,7 +1642,6 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
         maximumWidth = Math.round((percentageValue / 100) * attributes.maximumWidth);
       }
     }
-
     if (tableStyles.width) {
       if (pixelRegex.test(tableStyles.width)) {
         pixelRegex.lastIndex = 0;
@@ -1640,7 +1652,6 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
         width = Math.round((percentageValue / 100) * attributes.maximumWidth);
       }
     }
-
     if (width) {
       modifiedAttributes.width = width;
       if (maximumWidth) {
