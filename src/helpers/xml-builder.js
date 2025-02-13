@@ -528,6 +528,26 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
         tempAttributes = cloneDeep(attributes);
         tempRunFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'r');
       } else if (isVNode(tempVNode)) {
+        if (tempVNode.tagName === 'br') {
+          const lineBreakFragment = buildLineBreak('textWrapping');
+          tempRunFragment.import(lineBreakFragment);
+          runFragmentsArray.push(tempRunFragment);
+
+          // re initialize temp run fragments with new fragment
+          tempAttributes = cloneDeep(attributes);
+          tempRunFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'r');
+
+          // If the next node is a text node, trim its leading whitespace
+          if (vNodes.length > 0 && isVText(vNodes[0])) {
+            vNodes[0].text = vNodes[0].text.replace(/^\s+/, '');
+            // If the text is now empty, skip it
+            if (!vNodes[0].text) {
+              vNodes.shift();
+            }
+          }
+          // eslint-disable-next-line no-continue
+          continue;
+        }
         if (
           [
             'strong',
@@ -598,7 +618,6 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
         if (tempVNode.children.length > 1) {
           attributes = { ...attributes, ...tempAttributes };
         }
-
         vNodes = tempVNode.children.slice().concat(vNodes);
       }
     }
@@ -647,7 +666,7 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
     const imageFragment = buildDrawing(inlineOrAnchored, type, otherAttributes);
     runFragment.import(imageFragment);
   } else if (isVNode(vNode) && vNode.tagName === 'br') {
-    const lineBreakFragment = buildLineBreak('line');
+    const lineBreakFragment = buildLineBreak('textWrapping');
     runFragment.import(lineBreakFragment);
   }
   runFragment.up();
