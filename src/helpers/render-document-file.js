@@ -209,7 +209,9 @@ export const buildList = async (vNode, docxDocumentInstance, xmlFragment) => {
 };
 
 export async function convertVTreeToXML(docxDocumentInstance, vTree, xmlFragment) {
-  if (!vTree) return xmlFragment;
+  if (!vTree) {
+    return xmlFragment;
+  }
   if (Array.isArray(vTree) && vTree.length) {
     // eslint-disable-next-line no-restricted-syntax
     for (const vNode of vTree) {
@@ -315,6 +317,17 @@ export async function convertVTreeToXML(docxDocumentInstance, vTree, xmlFragment
 }
 
 async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
+  if (
+    isVNode(vNode) &&
+    vNode.tagName === 'div' &&
+    vNode.properties &&
+    vNode.properties.attributes &&
+    vNode.properties.attributes['data-docx-column-group']
+  ) {
+    // nested column group requires processing from the top
+    await convertVTreeToXML(docxDocumentInstance, vNode, xmlFragment);
+    return;
+  }
   if (
     isVNode(vNode) &&
     vNode.tagName === 'div' &&
