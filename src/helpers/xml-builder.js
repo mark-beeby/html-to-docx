@@ -1708,6 +1708,10 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
         }
       }
 
+      if (tableStyles?.['border-style'] && tableStyles?.['border-style'] === 'none') {
+        borderSize = 0;
+      }
+
       // Only add borders if we have a size > 0
       if (borderSize > 0) {
         modifiedAttributes.tableBorders = {
