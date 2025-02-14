@@ -1387,8 +1387,10 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
 
       if (percentageRegex.test(colWidthStr)) {
         colWidth = Math.round((parseFloat(colWidthStr) / 100) * width);
+        colWidthTwips = colWidth;
       } else if (pixelRegex.test(colWidthStr)) {
         colWidth = pixelToTWIP(colWidthStr.match(pixelRegex)[1]);
+        colWidthTwips = colWidth;
       }
     }
 
@@ -1579,12 +1581,21 @@ const buildTableGridFromTableRow = (vNode, width) => {
   const gridColumns = vNode.children.filter(
     (childVNode) => childVNode.tagName === 'td' || childVNode.tagName === 'th'
   );
-  const gridWidth = width / gridColumns.length;
 
   for (let index = 0; index < gridColumns.length; index++) {
-    const tableGridColFragment = buildTableGridCol(gridWidth);
+    const col = gridColumns[index];
+    const colWidthStr = col.attributes?.width || col.properties.style.width || 'auto';
+    let colWidth = width / gridColumns.length; // Default evenly distributed widths
+
+    if (percentageRegex.test(colWidthStr)) {
+      colWidth = Math.round((parseFloat(colWidthStr) / 100) * width);
+    } else if (pixelRegex.test(colWidthStr)) {
+      colWidth = pixelToTWIP(colWidthStr.match(pixelRegex)[1]);
+    }
+    const tableGridColFragment = buildTableGridCol(colWidth);
     tableGridFragment.import(tableGridColFragment);
   }
+
   tableGridFragment.up();
 
   return tableGridFragment;
