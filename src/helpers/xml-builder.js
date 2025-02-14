@@ -1589,7 +1589,58 @@ const buildTableGridFromTableRow = (vNode, width) => {
 
   return tableGridFragment;
 };
+const parseBorderStyle = (borderStyle) => {
+  if (!borderStyle) return {};
 
+  // Match width, style, and color in any order
+  // First extract any rgb/rgba values to prevent splitting them
+  const rgbMatches = borderStyle.match(/rgba?\([^)]+\)|hsla?\([^)]+\)/g) || [];
+  let remainingStyle = borderStyle;
+  const rgbPlaceholders = {};
+
+  // Replace rgb/rgba/hsl/hsla values with placeholders
+  rgbMatches.forEach((match, index) => {
+    // Ensure the match is properly formatted
+    if (
+      !match.match(/^(rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)|hsla?\([^)]+\))$/)
+    ) {
+      console.warn(`Invalid color format found in border style: ${match}`);
+      return;
+    }
+    const placeholder = `__COLOR_${index}__`;
+    rgbPlaceholders[placeholder] = match;
+    remainingStyle = remainingStyle.replace(match, placeholder);
+  });
+
+  const parts = remainingStyle.split(/\s+/);
+  const result = {};
+
+  parts.forEach((part) => {
+    // Restore rgb values from placeholders
+    const actualPart = rgbPlaceholders[part] || part;
+
+    if (actualPart.match(/^[0-9]+(\.[0-9]+)?(px|pt|em|rem)$/)) {
+      result.width = parseInt(actualPart);
+    } else if (
+      actualPart.match(/^(none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset)$/)
+    ) {
+      result.style = actualPart;
+    } else if (
+      actualPart.match(/^(rgb|rgba|#|hsl|hsla)/i) ||
+      Object.prototype.hasOwnProperty.call(colorNames, actualPart.toLowerCase())
+    ) {
+      try {
+        result.color = fixupColorCode(actualPart);
+        console.log('Parsed color value:', actualPart, '→', result.color);
+      } catch (error) {
+        console.warn(`Error parsing color value: ${actualPart}`, error);
+        result.color = '000000'; // Fallback to black
+      }
+    }
+  });
+
+  return result;
+};
 const buildTable = async (vNode, attributes, docxDocumentInstance) => {
   const tableFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tbl');
   const modifiedAttributes = { ...attributes };
@@ -1610,16 +1661,18 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
       };
     } else {
       // Initialize border properties
+      // eslint-disable-next-line prefer-const
       let [borderSize, borderStrike, borderColor] = [0, 'single', '000000'];
 
+      if (tableStyles?.border) {
+        const border = parseBorderStyle(tableStyles.border);
+        borderSize = border.width || borderSize;
+        borderColor = border.color || borderColor;
+      }
       // Check HTML border attribute
       // eslint-disable-next-line no-restricted-globals
       if (!isNaN(tableAttributes.border)) {
         borderSize = parseInt(tableAttributes.border, 10);
-        if (borderSize > 0) {
-          borderStrike = 'single';
-          borderColor = '000000';
-        }
       }
 
       // Only add borders if we have a size > 0
