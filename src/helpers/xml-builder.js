@@ -1506,7 +1506,6 @@ const buildTableGrid = (vNode, attributes) => {
   if (vNodeHasChildren(vNode)) {
     const gridColumns = vNode.children.filter((childVNode) => childVNode.tagName === 'col');
     const gridWidth = (attributes.width || attributes.maximumWidth) / gridColumns.length;
-
     for (let index = 0; index < gridColumns.length; index++) {
       const tableGridColFragment = buildTableGridCol(gridWidth);
       tableGridFragment.import(tableGridColFragment);
@@ -1578,9 +1577,22 @@ const buildTableProperties = (attributes) => {
 
 const buildTableGridFromTableRow = (vNode, width) => {
   const tableGridFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tblGrid');
+
   const gridColumns = vNode.children.filter(
     (childVNode) => childVNode.tagName === 'td' || childVNode.tagName === 'th'
   );
+  let hasColSpan = false;
+  for (let index = 0; index < gridColumns.length; index++) {
+    const col = gridColumns[index];
+    if (col.properties.colSpan) {
+      hasColSpan = true;
+      break;
+    }
+  }
+  // this grid can't be built from this row.
+  if (hasColSpan) {
+    return false;
+  }
 
   for (let index = 0; index < gridColumns.length; index++) {
     const col = gridColumns[index];
@@ -1855,7 +1867,9 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
                 grandChildVNode,
                 modifiedAttributes.width
               );
-              tableFragment.import(tableGridFragment);
+              if (tableGridFragment) {
+                tableFragment.import(tableGridFragment);
+              }
             }
             const tableRowFragment = await buildTableRow(
               docxDocumentInstance,
@@ -1879,7 +1893,9 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
                 grandChildVNode,
                 modifiedAttributes.width
               );
-              tableFragment.import(tableGridFragment);
+              if (tableGridFragment) {
+                tableFragment.import(tableGridFragment);
+              }
             }
             const tableRowFragment = await buildTableRow(
               docxDocumentInstance,
@@ -1900,7 +1916,9 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
             childVNode,
             modifiedAttributes.width
           );
-          tableFragment.import(tableGridFragment);
+          if (tableGridFragment) {
+            tableFragment.import(tableGridFragment);
+          }
         }
 
         const tableRowFragment = await buildTableRow(
