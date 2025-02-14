@@ -1615,6 +1615,7 @@ const parseBorderStyle = (borderStyle) => {
     if (
       !match.match(/^(rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)|hsla?\([^)]+\))$/)
     ) {
+      // eslint-disable-next-line no-console
       console.warn(`Invalid color format found in border style: ${match}`);
       return;
     }
@@ -1643,6 +1644,7 @@ const parseBorderStyle = (borderStyle) => {
       try {
         result.color = fixupColorCode(actualPart);
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.warn(`Error parsing color value: ${actualPart}`, error);
         result.color = '000000'; // Fallback to black
       }
@@ -1674,15 +1676,24 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
       // eslint-disable-next-line prefer-const
       let [borderSize, borderStrike, borderColor] = [0, 'single', '000000'];
 
+      // Check HTML border attribute
+      // eslint-disable-next-line no-restricted-globals
+      if (!isNaN(tableAttributes.border)) {
+        borderSize = parseInt(tableAttributes.border, 10);
+      }
+
       if (tableStyles?.border) {
         const border = parseBorderStyle(tableStyles.border);
         borderSize = border.width || borderSize;
         borderColor = border.color || borderColor;
       }
-      // Check HTML border attribute
-      // eslint-disable-next-line no-restricted-globals
-      if (!isNaN(tableAttributes.border)) {
-        borderSize = parseInt(tableAttributes.border, 10);
+
+      if (tableStyles?.['border-width']) {
+        const parsed = String(tableStyles?.['border-width']).replace(/[^0-9.]/g, '');
+        const parsedBorderWidth = parsed === '' ? false : parseInt(parsed);
+        if (parsedBorderWidth !== false) {
+          borderSize = parsedBorderWidth;
+        }
       }
 
       // Only add borders if we have a size > 0
