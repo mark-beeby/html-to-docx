@@ -1360,6 +1360,7 @@ async function resizeNestedTable(vNode, parentColumnWidth, docxDocumentInstance)
 }
 
 const buildTableRow = async function buildTableRow(docxDocumentInstance, columns, attributes = {}) {
+  const width = attributes.width || attributes.maximumWidth || '100%';
   const tableRowFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tr');
 
   // Add consistent row height
@@ -1373,10 +1374,24 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
   // eslint-disable-next-line no-restricted-syntax
   for (const column of columns) {
     const colspan = parseInt(column.properties?.colSpan || '1', 10);
-    const colWidth = parseInt(column.properties?.attributes?.['data-docx-column'] || '1', 10);
     const totalPadding = columns.length * 200;
-    const colWidthTwips =
-      Math.floor((colWidth / 12) * docxDocumentInstance.availableDocumentSpace) - totalPadding;
+    let colWidth = 'auto';
+    let colWidthTwips = docxDocumentInstance.availableDocumentSpace;
+    if (column.properties?.attributes?.['data-docx-column']) {
+      colWidth = parseInt(column.properties?.attributes?.['data-docx-column'] || '1', 10);
+      colWidthTwips =
+        Math.floor((colWidth / 12) * docxDocumentInstance.availableDocumentSpace) - totalPadding;
+    } else {
+      const colWidthStr = column.properties.style.width || 'auto';
+      colWidth = columns / columns.length; // Default evenly distributed widths
+
+      if (percentageRegex.test(colWidthStr)) {
+        colWidth = Math.round((parseFloat(colWidthStr) / 100) * width);
+      } else if (pixelRegex.test(colWidthStr)) {
+        colWidth = pixelToTWIP(colWidthStr.match(pixelRegex)[1]);
+      }
+    }
+
     const tableCellFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tc');
     const align = column.properties?.style?.['text-align'];
     const vAlign = column.properties?.attributes?.valign;
