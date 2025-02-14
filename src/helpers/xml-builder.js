@@ -1631,7 +1631,6 @@ const parseBorderStyle = (borderStyle) => {
     ) {
       try {
         result.color = fixupColorCode(actualPart);
-        console.log('Parsed color value:', actualPart, '→', result.color);
       } catch (error) {
         console.warn(`Error parsing color value: ${actualPart}`, error);
         result.color = '000000'; // Fallback to black
