@@ -98,7 +98,12 @@ Full fledged examples can be found under `example/`
   - `header` <?[Boolean]> flag to enable header. Defaults to `false`.
   - `footerType` <"default"|"first"|"even"> type of footer. Defaults to `default`.
   - `footer` <?[Boolean]> flag to enable footer. Defaults to `false`.
-  - `font` <?[String]> font name to be used. Defaults to `Times New Roman`.
+  - `font` <?[String]> default font name to be used. Defaults to `Times New Roman`.
+  - `fonts` <?[Array]<[Object]>> array of font configurations for embedding custom fonts.
+    - `name` <[String]> name of the font to be used in the document.
+    - `path` <[String]> absolute path to the TTF font file.
+    - `weight` <?[String]> font weight (e.g., 'normal', 'bold'). Defaults to 'normal'.
+    - `style` <?[String]> font style (e.g., 'normal', 'italic'). Defaults to 'normal'.
   - `fontSize` <?[Number]> size of font in HIP(Half of point). Defaults to `22`. Supports equivalent measure in [pt].
   - `complexScriptFontSize` <?[Number]> size of complex script font in HIP(Half of point). Defaults to `22`. Supports equivalent measure in [pt].
   - `table` <?[Object]>
