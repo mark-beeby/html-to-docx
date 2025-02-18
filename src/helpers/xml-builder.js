@@ -337,8 +337,11 @@ const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes,
     ) {
       modifiedAttributes.textAlign = style['text-align'];
     }
-    if (style['font-weight'] && style['font-weight'] === 'bold') {
-      modifiedAttributes.strong = style['font-weight'];
+    if (style['font-weight']) {
+      const weight = style['font-weight'];
+      if (weight === 'bold' || parseInt(weight, 10) >= 700) {
+        modifiedAttributes.strong = true;
+      }
     }
     if (style['line-height']) {
       modifiedAttributes.lineHeight = fixupLineHeight(

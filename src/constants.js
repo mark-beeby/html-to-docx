@@ -75,6 +75,7 @@ const themeFileName = 'theme1';
 const documentFileName = 'document';
 const headerType = 'header';
 const footerType = 'footer';
+const fontType = 'font';
 const themeType = 'theme';
 const hyperlinkType = 'hyperlink';
 const imageType = 'image';
@@ -116,6 +117,7 @@ export {
   documentFileName,
   headerType,
   footerType,
+  fontType,
   themeType,
   internalRelationship,
   wordFolder,

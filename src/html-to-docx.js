@@ -141,6 +141,9 @@ async function addFilesToContainer(
 
   const docxDocument = new DocxDocument({ zip, htmlString, ...documentOptions });
 
+  // Embed fonts before generating document XML
+  await docxDocument.embedFonts();
+
   docxDocument.documentXML = await renderDocumentFile(docxDocument);
 
   zip

@@ -3,6 +3,8 @@ import { nanoid } from 'nanoid';
 import https from 'https';
 import http from 'http';
 import sharp from 'sharp';
+import * as fs from 'fs/promises';
+import { convertToODTTF } from './utils/odttf';
 import {
   generateCoreXML,
   generateStylesXML,
@@ -34,6 +36,7 @@ import {
   hyperlinkType,
   documentFileName,
   imageType,
+  fontType,
   defaultDocumentOptions,
 } from './constants';
 import ListStyleBuilder from './utils/list';
@@ -167,6 +170,7 @@ class DocxDocument {
     this.stylesObjects = [];
     this.numberingObjects = [];
     this.fontTableObjects = [];
+    this.fonts = properties.fonts || [];
     this.relationshipFilename = documentFileName;
     this.relationships = [{ fileName: documentFileName, lastRelsId: 5, rels: [] }];
     this.mediaFiles = [];
@@ -189,6 +193,7 @@ class DocxDocument {
     this.generateHeaderXML = this.generateHeaderXML.bind(this);
     this.generateFooterXML = this.generateFooterXML.bind(this);
     this.generateSectionXML = generateSectionXML.bind(this);
+    this.embedFonts = this.embedFonts.bind(this);
 
     this.ListStyleBuilder = new ListStyleBuilder(properties.numbering);
   }
@@ -238,6 +243,19 @@ class DocxDocument {
 
     generateContentTypesFragments(contentTypesXML, 'header', this.headerObjects);
     generateContentTypesFragments(contentTypesXML, 'footer', this.footerObjects);
+
+    // Add font content type
+    if (this.fonts && this.fonts.length > 0) {
+      const contentTypesFragment = fragment({
+        defaultNamespace: { ele: namespaces.contentTypes },
+      })
+        .ele('Default')
+        .att('Extension', 'odttf')
+        .att('ContentType', 'application/vnd.openxmlformats-officedocument.obfuscatedFont')
+        .up();
+
+      contentTypesXML.root().import(contentTypesFragment);
+    }
 
     return contentTypesXML.toString({ prettyPrint: true });
   }
@@ -377,48 +395,10 @@ class DocxDocument {
   }
 
   generateFontTableXML() {
-    const fontTableXML = create({ encoding: 'UTF-8', standalone: true }, fontTableXMLString);
-    const fontNames = [
-      'Arial',
-      'Calibri',
-      'Calibri Light',
-      'Courier New',
-      'Symbol',
-      'Times New Roman',
-    ];
-    this.fontTableObjects.forEach(({ fontName, genericFontName }) => {
-      if (!fontNames.includes(fontName)) {
-        fontNames.push(fontName);
-        const fontFragment = fragment({
-          namespaceAlias: { w: namespaces.w },
-        })
-          .ele('@w', 'font')
-          .att('@w', 'name', fontName);
-
-        switch (genericFontName) {
-          case 'serif':
-            fontFragment.ele('@w', 'altName').att('@w', 'val', 'Times New Roman');
-            fontFragment.ele('@w', 'family').att('@w', 'val', 'roman');
-            fontFragment.ele('@w', 'pitch').att('@w', 'val', 'variable');
-            break;
-          case 'sans-serif':
-            fontFragment.ele('@w', 'altName').att('@w', 'val', 'Arial');
-            fontFragment.ele('@w', 'family').att('@w', 'val', 'swiss');
-            fontFragment.ele('@w', 'pitch').att('@w', 'val', 'variable');
-            break;
-          case 'monospace':
-            fontFragment.ele('@w', 'altName').att('@w', 'val', 'Courier New');
-            fontFragment.ele('@w', 'family').att('@w', 'val', 'modern');
-            fontFragment.ele('@w', 'pitch').att('@w', 'val', 'fixed');
-            break;
-          default:
-            break;
-        }
-
-        fontTableXML.root().import(fontFragment);
-      }
-    });
-
+    const fontTableXML = create(
+      { encoding: 'UTF-8', standalone: true },
+      fontTableXMLString(this.fonts)
+    );
     return fontTableXML.toString({ prettyPrint: true });
   }
 
@@ -608,18 +588,25 @@ class DocxDocument {
     return { id: this.lastMediaId, fileContent: base64FileContent, fileNameWithExtension };
   }
 
-  createDocumentRelationships(fileName = 'document', type, target, targetMode = 'External') {
+  createDocumentRelationships(fileName = 'document', type, target, targetMode = 'External', opts) {
+    const ridOverride = opts?.ridOverride;
     let relationshipObject = this.relationships.find(
       (relationship) => relationship.fileName === fileName
     );
     let lastRelsId = 1;
-    if (relationshipObject) {
-      lastRelsId = relationshipObject.lastRelsId + 1;
-      relationshipObject.lastRelsId = lastRelsId;
-    } else {
-      relationshipObject = { fileName, lastRelsId, rels: [] };
-      this.relationships.push(relationshipObject);
+    if (!ridOverride || !relationshipObject) {
+      if (relationshipObject) {
+        lastRelsId = relationshipObject.lastRelsId + 1;
+        relationshipObject.lastRelsId = lastRelsId;
+      } else {
+        relationshipObject = { fileName, lastRelsId, rels: [] };
+        this.relationships.push(relationshipObject);
+      }
     }
+    if (ridOverride) {
+      lastRelsId = ridOverride;
+    }
+
     let relationshipType;
     switch (type) {
       case hyperlinkType:
@@ -636,6 +623,9 @@ class DocxDocument {
         break;
       case themeFileType:
         relationshipType = namespaces.themes;
+        break;
+      case fontType:
+        relationshipType = namespaces.fonts;
         break;
     }
 
@@ -1305,6 +1295,51 @@ class DocxDocument {
       .folder('word/media')
       .file(imageFile.fileNameWithExtension, imageFile.fileContent, { base64: true });
     return imageFile;
+  }
+
+  async embedFonts() {
+    if (!this.fonts || !this.fonts.length) return;
+
+    // eslint-disable-next-line no-restricted-syntax
+    for (const font of this.fonts) {
+      try {
+        // Read the font file
+        // eslint-disable-next-line no-await-in-loop
+        let fontData = await fs.readFile(font.path);
+        if (font.path.trim().toLowerCase().endsWith('.ttf')) {
+          try {
+            const { guid, data } = convertToODTTF(font.path);
+            font.guid = guid;
+            fontData = data;
+          } catch (error) {
+            console.error('Error converting font:', error);
+            throw new Error(`Error converting font: ${error}`);
+          }
+        }
+
+        const base64Font = fontData.toString('base64');
+
+        // Add font file to the zip
+        const fontFileName = `${font.name.toLowerCase().replace(/\s+/g, '_')}.odttf`;
+        this.zip.folder('word/fonts').file(fontFileName, base64Font, { base64: true });
+
+        this.createDocumentRelationships(
+          'fontTable',
+          fontType,
+          `fonts/${fontFileName.replaceAll(' ', '')}`,
+          'Internal',
+          {
+            ridOverride: font.name.replaceAll(' ', ''),
+          }
+        );
+      } catch (error) {
+        console.error(`Error embedding font ${font.name}:`, error);
+      }
+    }
+
+    // Generate and add font table XML once guids have been created
+    const fontTableXML = this.generateFontTableXML();
+    this.zip.file('word/fontTable.xml', fontTableXML);
   }
 }
 
