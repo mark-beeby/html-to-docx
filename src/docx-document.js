@@ -380,7 +380,7 @@ class DocxDocument {
 
   // eslint-disable-next-line class-methods-use-this
   generateSettingsXML() {
-    return generateXMLString(settingsXMLString);
+    return generateXMLString(settingsXMLString(!!this.fonts?.length));
   }
 
   // eslint-disable-next-line class-methods-use-this
