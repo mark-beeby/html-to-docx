@@ -81,7 +81,7 @@ function convertToODTTF(inputTTFPath) {
   const fontData = fs.readFileSync(inputTTFPath);
   // we've hard coded this GUID as the full algorithm has been difficult to fully reverse engineer.
   const guid = `${formatGuid('09014A78CABC4EF012AC5CD89AEFDE09')}`;
-  const guidBytes = processGuid(guid, inputTTFPath.indexOf('quicksand') !== -1);
+  const guidBytes = processGuid(guid);
   const key = Buffer.concat([guidBytes, guidBytes]);
 
   const obfuscatedFont = Buffer.from(fontData);
