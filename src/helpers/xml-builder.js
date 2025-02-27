@@ -1703,6 +1703,13 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
         borderColor = border.color || borderColor;
       }
 
+      if (
+        tableStyles['background-color'] &&
+        !colorlessColors.includes(tableStyles['background-color'])
+      ) {
+        modifiedAttributes.backgroundColor = fixupColorCode(tableStyles['background-color']);
+      }
+
       if (tableStyles?.['border-width']) {
         const parsed = String(tableStyles?.['border-width']).replace(/[^0-9.]/g, '');
         const parsedBorderWidth = parsed === '' ? false : parseInt(parsed);
