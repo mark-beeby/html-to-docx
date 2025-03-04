@@ -355,9 +355,18 @@ const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes,
     if (style['margin-bottom']) {
       modifiedAttributes.marginBottom = fixupMargin(style['margin-bottom']);
     }
-    if (style['margin-left'] || style['margin-right']) {
-      const leftMargin = fixupMargin(style['margin-left']);
-      const rightMargin = fixupMargin(style['margin-right']);
+    if (
+      style['margin-left'] ||
+      style['margin-right'] ||
+      style['padding-left'] ||
+      style['padding-right']
+    ) {
+      const leftMargin = style['margin-left']
+        ? fixupMargin(style['margin-left'])
+        : fixupMargin(style['padding-left']);
+      const rightMargin = style['margin-right']
+        ? fixupMargin(style['margin-right'])
+        : fixupMargin(style['padding-right']);
       const indentation = {};
       if (leftMargin) {
         indentation.left = leftMargin;
@@ -1700,6 +1709,11 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
       if (tableStyles?.border) {
         const border = parseBorderStyle(tableStyles.border);
         borderSize = border.width || borderSize;
+        borderColor = border.color || borderColor;
+      }
+
+      if (tableStyles?.['border-color']) {
+        const border = parseBorderStyle(tableStyles['border-color']);
         borderColor = border.color || borderColor;
       }
 
