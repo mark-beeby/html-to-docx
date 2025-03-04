@@ -41,6 +41,7 @@ import {
 } from './constants';
 import ListStyleBuilder from './utils/list';
 import { fontFamilyToTableObject } from './utils/font-family-conversion';
+import { pixelRegex, pixelToHIP, pointRegex, pointToHIP } from './utils/unit-conversion';
 
 function generateContentTypesFragments(contentTypesXML, type, objects) {
   if (objects && Array.isArray(objects)) {
@@ -414,7 +415,6 @@ class DocxDocument {
 
     const abstractNumberingFragments = fragment();
     const numberingFragments = fragment();
-
     this.numberingObjects.forEach(({ numberingId, type, properties }) => {
       const abstractNumberingFragment = fragment({ namespaceAlias: { w: namespaces.w } })
         .ele('@w', 'abstractNum')
@@ -482,12 +482,28 @@ class DocxDocument {
             .att('@w', 'hint', 'default')
             .up();
         }
-
         // Add color if specified in properties (for both ul and ol)
         if (properties.style && properties.style.primaryColour) {
           rPrFragment
             .ele('@w', 'color')
             .att('@w', 'val', properties.style.primaryColour.replace('#', ''));
+        }
+
+        // Add color if specified in properties (for both ul and ol)
+        if (properties.style && properties.style['font-size']) {
+          const fontSizeString = properties.style['font-size'];
+          let fontSize = properties.style['font-size'];
+          if (pointRegex.test(fontSizeString)) {
+            const matchedParts = fontSizeString.match(pointRegex);
+            // convert point to half point
+            fontSize = pointToHIP(matchedParts[1]);
+          } else if (pixelRegex.test(fontSizeString)) {
+            const matchedParts = fontSizeString.match(pixelRegex);
+            // convert pixels to half point
+            fontSize = pixelToHIP(matchedParts[1]);
+          }
+
+          rPrFragment.ele('@w', 'sz').att('@w', 'val', fontSize);
         }
 
         levelFragment.last().import(rPrFragment);
@@ -544,7 +560,6 @@ class DocxDocument {
 
   createNumbering(type, properties) {
     this.lastNumberingId += 1;
-
     // Ensure style object exists and contains colour if specified
     const style = properties?.style || {};
     if (properties?.primaryColour && !style.primaryColour) {
