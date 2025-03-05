@@ -1606,16 +1606,45 @@ const buildTableGridFromTableRow = (vNode, width) => {
     return false;
   }
 
-  for (let index = 0; index < gridColumns.length; index++) {
-    const col = gridColumns[index];
+  // First pass: collect all percentage values
+  let totalPercentage = 0;
+  const columnWidths = gridColumns.map((col) => {
     const colWidthStr = col.attributes?.width || col.properties.style.width || 'auto';
-    let colWidth = width / gridColumns.length; // Default evenly distributed widths
-
     if (percentageRegex.test(colWidthStr)) {
-      colWidth = Math.round((parseFloat(colWidthStr) / 100) * width);
+      const percentage = parseFloat(colWidthStr);
+      totalPercentage += percentage;
+      return { type: 'percentage', value: percentage };
     } else if (pixelRegex.test(colWidthStr)) {
-      colWidth = pixelToTWIP(colWidthStr.match(pixelRegex)[1]);
+      const pixels = pixelToTWIP(colWidthStr.match(pixelRegex)[1]);
+      return { type: 'pixels', value: pixels };
     }
+    return { type: 'auto' };
+  });
+
+  // Normalize percentages if needed
+  if (totalPercentage > 0 && totalPercentage < 100) {
+    const scaleFactor = 100 / totalPercentage;
+    columnWidths.forEach((col) => {
+      if (col.type === 'percentage') {
+        col.value *= scaleFactor;
+      }
+    });
+  }
+
+  // Second pass: calculate final widths and build grid
+  for (let i = 0; i < gridColumns.length; i++) {
+    let colWidth;
+    const col = columnWidths[i];
+
+    if (col.type === 'percentage') {
+      colWidth = Math.round((col.value / 100) * width);
+    } else if (col.type === 'pixels') {
+      colWidth = col.value;
+    } else {
+      // Distribute remaining width evenly among 'auto' columns
+      colWidth = width / gridColumns.length;
+    }
+
     const tableGridColFragment = buildTableGridCol(colWidth);
     tableGridFragment.import(tableGridColFragment);
   }
@@ -1758,7 +1787,7 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
     let minimumWidth;
     let maximumWidth;
     let width;
-
+    tableStyles['min-width'] = tableStyles['min-width'] || tableStyles.width;
     if (tableStyles['min-width']) {
       if (pixelRegex.test(tableStyles['min-width'])) {
         minimumWidth = pixelToTWIP(tableStyles['min-width'].match(pixelRegex)[1]);
@@ -1797,9 +1826,10 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
       } else if (percentageRegex.test(tableStyles.width)) {
         percentageRegex.lastIndex = 0;
         const percentageValue = tableStyles.width.match(percentageRegex)[1];
-        width = Math.round((percentageValue / 100) * attributes.maximumWidth);
+        width = Math.round(Math.round((percentageValue / 100) * 12240));
       }
     }
+
     if (width) {
       modifiedAttributes.width = width;
       if (maximumWidth) {
