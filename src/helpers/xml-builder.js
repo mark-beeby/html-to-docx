@@ -1375,12 +1375,36 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
   const width = attributes.width || attributes.maximumWidth || '100%';
   const tableRowFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tr');
 
+  const needsRowHeight = columns.some((column) => {
+    const style = column.properties?.style || {};
+    const hasPadding = [
+      style.padding,
+      style['padding-top'],
+      style['padding-bottom'],
+      style.margin,
+      style['margin-top'],
+      style['margin-bottom'],
+    ].some((value) => {
+      if (!value) return false;
+      // Convert percentage or pixel values to numbers
+      const numericValue = parseFloat(value);
+      // eslint-disable-next-line no-restricted-globals
+      return !isNaN(numericValue) && numericValue > 0;
+    });
+
+    return hasPadding;
+  });
   // Add consistent row height
   const trPr = tableRowFragment.ele('@w', 'trPr');
-  trPr
-    .ele('@w', 'trHeight')
-    .att('@w', 'val', '400') // Set a default height of 400 twips (about 0.28 inches)
-    .att('@w', 'hRule', 'atLeast'); // atLeast ensures minimum height while allowing expansion if needed
+
+  if (needsRowHeight) {
+    trPr
+      .ele('@w', 'trHeight')
+      .att('@w', 'val', '400') // Set a default height of 400 twips (about 0.28 inches)
+      .att('@w', 'hRule', 'atLeast'); // atLeast ensures minimum height while allowing expansion if needed
+  } else {
+    trPr.ele('@w', 'trHeight').att('@w', 'hRule', 'atLeast'); // atLeast ensures minimum height while allowing expansion if needed
+  }
 
   // Process each column
   // eslint-disable-next-line no-restricted-syntax
