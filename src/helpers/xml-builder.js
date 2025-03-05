@@ -1371,6 +1371,48 @@ async function resizeNestedTable(vNode, parentColumnWidth, docxDocumentInstance)
   return tableFragment;
 }
 
+const parseCSSSpacing = (style, property) => {
+  // Handle individual properties (padding-left, padding-right, etc.)
+  const specificValue = style[`${property}`];
+  if (specificValue) {
+    if (specificValue.endsWith('px')) {
+      return pixelToTWIP(parseFloat(specificValue));
+    }
+    // Add other unit conversions as needed
+  }
+
+  // Handle shorthand property (padding: 10px 20px, etc.)
+  const shorthand = style[property.split('-')[0]];
+  if (shorthand) {
+    const values = shorthand.split(' ').map((v) => v.trim());
+    if (values.length === 1) {
+      // Same value for all sides
+      return pixelToTWIP(parseFloat(values[0]));
+    }
+    if (values.length === 2) {
+      // vertical horizontal
+      return property.includes('left') || property.includes('right')
+        ? pixelToTWIP(parseFloat(values[1]))
+        : pixelToTWIP(parseFloat(values[0]));
+    }
+    if (values.length === 4) {
+      // top right bottom left
+      // eslint-disable-next-line no-nested-ternary
+      const index = property.includes('top')
+        ? 0
+        : // eslint-disable-next-line no-nested-ternary
+        property.includes('right')
+        ? 1
+        : property.includes('bottom')
+        ? 2
+        : 3;
+      return pixelToTWIP(parseFloat(values[index]));
+    }
+  }
+
+  return null;
+};
+
 const buildTableRow = async function buildTableRow(docxDocumentInstance, columns, attributes = {}) {
   const width = attributes.width || attributes.maximumWidth || '100%';
   const tableRowFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tr');
@@ -1464,6 +1506,22 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
         }
       });
     }
+
+    const style = column.properties?.style || {};
+
+    // Calculate margins from both padding and margin
+    const leftSpace =
+      parseCSSSpacing(style, 'padding-left') || parseCSSSpacing(style, 'margin-left') || 0; // default value
+
+    const rightSpace =
+      parseCSSSpacing(style, 'padding-right') || parseCSSSpacing(style, 'margin-right') || 0; // default value
+
+    const topSpace =
+      parseCSSSpacing(style, 'padding-top') || parseCSSSpacing(style, 'margin-top') || 0; // default value
+
+    const bottomSpace =
+      parseCSSSpacing(style, 'padding-bottom') || parseCSSSpacing(style, 'margin-bottom') || 0; // default value
+
     // Set up column width
     tableCellFragment
       .ele('@w', 'tcPr')
@@ -1480,19 +1538,19 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
       .up()
       .ele('@w', 'tcMar')
       .ele('@w', 'top')
-      .att('@w', 'w', '0')
+      .att('@w', 'w', topSpace.toString())
       .att('@w', 'type', 'dxa')
       .up()
       .ele('@w', 'left')
-      .att('@w', 'w', '100')
+      .att('@w', 'w', leftSpace.toString())
       .att('@w', 'type', 'dxa')
       .up()
       .ele('@w', 'bottom')
-      .att('@w', 'w', '0')
+      .att('@w', 'w', bottomSpace.toString())
       .att('@w', 'type', 'dxa')
       .up()
       .ele('@w', 'right')
-      .att('@w', 'w', '100')
+      .att('@w', 'w', rightSpace.toString())
       .att('@w', 'type', 'dxa')
       .up();
 
