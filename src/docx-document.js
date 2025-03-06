@@ -168,6 +168,7 @@ class DocxDocument {
     this.lastMediaId = 0;
     this.lastHeaderId = 0;
     this.lastFooterId = 0;
+    this.defaultLineHeight = properties.defaultLineHeight ? properties.defaultLineHeight : 1.1;
     this.stylesObjects = [];
     this.numberingObjects = [];
     this.fontTableObjects = [];
@@ -880,156 +881,148 @@ class DocxDocument {
     const relationshipType = type === 'header' ? `header${uniqId}` : `footer${uniqId}`;
     const styleVal = type === 'header' ? 'Header' : 'Footer';
     const { url } = backgroundImage;
-    try {
-      const { base64String, imageWidth, imageHeight } = await this.fetchImageAndGetDimensions(url);
-      const imageFile = this.createMediaFile(base64String);
-      const imageRelationshipId = this.createDocumentRelationships(
-        relationshipType,
-        imageType,
-        `media/${imageFile.fileNameWithExtension}`,
-        'Internal'
-      );
-      // Add the image file to the zip
-      this.zip
-        .folder('word/media')
-        .file(imageFile.fileNameWithExtension, imageFile.fileContent, { base64: true });
+    const { base64String, imageWidth, imageHeight } = await this.fetchImageAndGetDimensions(url);
+    const imageFile = this.createMediaFile(base64String);
+    const imageRelationshipId = this.createDocumentRelationships(
+      relationshipType,
+      imageType,
+      `media/${imageFile.fileNameWithExtension}`,
+      'Internal'
+    );
+    // Add the image file to the zip
+    this.zip
+      .folder('word/media')
+      .file(imageFile.fileNameWithExtension, imageFile.fileContent, { base64: true });
 
-      // Calculate the height while maintaining aspect ratio
-      const aspectRatio = imageWidth / imageHeight;
-      const imageHeightEMU = Math.round(pageWidthEMU / aspectRatio);
-      XML.ele('@w', 'p')
-        .ele('@w', 'pPr')
-        .ele('@w', 'pStyle')
-        .att('@w', 'val', styleVal)
-        .up()
-        .up()
-        .ele('@w', 'r')
-        .ele('@w', 'drawing')
-        .ele('@wp', 'anchor')
-        .att('behindDoc', '1')
-        .att('distT', '0')
-        .att('distB', '0')
-        .att('distL', '0')
-        .att('distR', '0')
-        .att('simplePos', '0')
-        .att('relativeHeight', '0')
-        .att('locked', '0')
-        .att('layoutInCell', '1')
-        .att('allowOverlap', '1')
-        .ele('@wp', 'simplePos')
-        .att('x', '0')
-        .att('y', '0')
-        .up()
-        .ele('@wp', 'positionH')
-        .att('relativeFrom', 'page')
-        .ele('@wp', 'posOffset')
-        .txt('0')
-        .up()
-        .up()
-        .ele('@wp', 'positionV')
-        .att('relativeFrom', 'page')
-        .ele('@wp', 'posOffset')
-        .txt(type === 'header' ? '0' : (pageHeightEMU - imageHeightEMU).toString())
-        .up()
-        .up()
-        .ele('@wp', 'extent')
-        .att('cx', pageWidthEMU)
-        .att('cy', imageHeightEMU)
-        .up()
-        .ele('@wp', 'effectExtent')
-        .att('l', '0')
-        .att('t', '0')
-        .att('r', '0')
-        .att('b', '0')
-        .up()
-        .ele('@wp', 'wrapNone')
-        .up()
-        .ele('@wp', 'docPr')
-        .att('id', '1')
-        .att('name', 'Background Picture')
-        .up()
-        .ele('@wp', 'cNvGraphicFramePr')
-        .ele('@a', 'graphicFrameLocks')
-        .att('noChangeAspect', '1')
-        .up()
-        .up()
-        .ele('@a', 'graphic')
-        .ele('@a', 'graphicData')
-        .att('uri', 'http://schemas.openxmlformats.org/drawingml/2006/picture')
-        .ele('@pic', 'pic')
-        .ele('@pic', 'nvPicPr')
-        .ele('@pic', 'cNvPr')
-        .att('id', '0')
-        .att('name', 'Background Picture')
-        .up()
-        .ele('@pic', 'cNvPicPr')
-        .up()
-        .up()
-        .ele('@pic', 'blipFill')
-        .ele('@a', 'blip')
-        .att('@r', 'embed', `rId${imageRelationshipId}`)
-        .up()
-        .ele('@a', 'stretch')
-        .ele('@a', 'fillRect')
-        .up()
-        .up()
-        .up()
-        .ele('@pic', 'spPr')
-        .ele('@a', 'xfrm')
-        .ele('@a', 'off')
-        .att('x', '0')
-        .att('y', '0')
-        .up()
-        .ele('@a', 'ext')
-        .att('cx', pageWidthEMU)
-        .att('cy', imageHeightEMU)
-        .up()
-        .up()
-        .ele('@a', 'prstGeom')
-        .att('prst', 'rect')
-        .ele('@a', 'avLst')
-        .up()
-        .up()
-        .up()
-        .up()
-        .up()
-        .up()
-        .up()
-        .up()
-        .up()
-        .up();
+    // Calculate the height while maintaining aspect ratio
+    const aspectRatio = imageWidth / imageHeight;
+    const imageHeightEMU = Math.round(pageWidthEMU / aspectRatio);
+    XML.ele('@w', 'p')
+      .ele('@w', 'pPr')
+      .ele('@w', 'pStyle')
+      .att('@w', 'val', styleVal)
+      .up()
+      .up()
+      .ele('@w', 'r')
+      .ele('@w', 'drawing')
+      .ele('@wp', 'anchor')
+      .att('behindDoc', '1')
+      .att('distT', '0')
+      .att('distB', '0')
+      .att('distL', '0')
+      .att('distR', '0')
+      .att('simplePos', '0')
+      .att('relativeHeight', '0')
+      .att('locked', '0')
+      .att('layoutInCell', '1')
+      .att('allowOverlap', '1')
+      .ele('@wp', 'simplePos')
+      .att('x', '0')
+      .att('y', '0')
+      .up()
+      .ele('@wp', 'positionH')
+      .att('relativeFrom', 'page')
+      .ele('@wp', 'posOffset')
+      .txt('0')
+      .up()
+      .up()
+      .ele('@wp', 'positionV')
+      .att('relativeFrom', 'page')
+      .ele('@wp', 'posOffset')
+      .txt(type === 'header' ? '0' : (pageHeightEMU - imageHeightEMU).toString())
+      .up()
+      .up()
+      .ele('@wp', 'extent')
+      .att('cx', pageWidthEMU)
+      .att('cy', imageHeightEMU)
+      .up()
+      .ele('@wp', 'effectExtent')
+      .att('l', '0')
+      .att('t', '0')
+      .att('r', '0')
+      .att('b', '0')
+      .up()
+      .ele('@wp', 'wrapNone')
+      .up()
+      .ele('@wp', 'docPr')
+      .att('id', '1')
+      .att('name', 'Background Picture')
+      .up()
+      .ele('@wp', 'cNvGraphicFramePr')
+      .ele('@a', 'graphicFrameLocks')
+      .att('noChangeAspect', '1')
+      .up()
+      .up()
+      .ele('@a', 'graphic')
+      .ele('@a', 'graphicData')
+      .att('uri', 'http://schemas.openxmlformats.org/drawingml/2006/picture')
+      .ele('@pic', 'pic')
+      .ele('@pic', 'nvPicPr')
+      .ele('@pic', 'cNvPr')
+      .att('id', '0')
+      .att('name', 'Background Picture')
+      .up()
+      .ele('@pic', 'cNvPicPr')
+      .up()
+      .up()
+      .ele('@pic', 'blipFill')
+      .ele('@a', 'blip')
+      .att('@r', 'embed', `rId${imageRelationshipId}`)
+      .up()
+      .ele('@a', 'stretch')
+      .ele('@a', 'fillRect')
+      .up()
+      .up()
+      .up()
+      .ele('@pic', 'spPr')
+      .ele('@a', 'xfrm')
+      .ele('@a', 'off')
+      .att('x', '0')
+      .att('y', '0')
+      .up()
+      .ele('@a', 'ext')
+      .att('cx', pageWidthEMU)
+      .att('cy', imageHeightEMU)
+      .up()
+      .up()
+      .ele('@a', 'prstGeom')
+      .att('prst', 'rect')
+      .ele('@a', 'avLst')
+      .up()
+      .up()
+      .up()
+      .up()
+      .up()
+      .up()
+      .up()
+      .up()
+      .up()
+      .up();
 
-      return imageHeightEMU;
-    } catch (error) {
-      console.error(`Error processing background image for ${type}:`, error);
-    }
+    return imageHeightEMU;
   }
 
   // eslint-disable-next-line consistent-return
   async getImageHeight(image) {
     const { url, width, height } = image;
 
-    try {
-      const { imageWidth, imageHeight } = await this.fetchImageAndGetDimensions(url);
+    const { imageWidth, imageHeight } = await this.fetchImageAndGetDimensions(url);
 
-      // Calculate dimensions based on provided width or height, maintaining aspect ratio
-      const aspectRatio = imageWidth / imageHeight;
-      let widthEMU;
-      if (width && !height) {
-        widthEMU = Math.round(parseFloat(width) * 9525); // 1 px = 9525 EMUs
-        return Math.round(widthEMU / aspectRatio);
-      }
-      if (!width && height) {
-        return Math.round(parseFloat(height) * 9525);
-      }
-      if (width && height) {
-        return Math.round(parseFloat(height) * 9525);
-      }
-      // If neither width nor height is provided, use original dimensions
-      return Math.round(imageHeight * 9525);
-    } catch (e) {
-      console.error('Error processing image height:', e);
+    // Calculate dimensions based on provided width or height, maintaining aspect ratio
+    const aspectRatio = imageWidth / imageHeight;
+    let widthEMU;
+    if (width && !height) {
+      widthEMU = Math.round(parseFloat(width) * 9525); // 1 px = 9525 EMUs
+      return Math.round(widthEMU / aspectRatio);
     }
+    if (!width && height) {
+      return Math.round(parseFloat(height) * 9525);
+    }
+    if (width && height) {
+      return Math.round(parseFloat(height) * 9525);
+    }
+    // If neither width nor height is provided, use original dimensions
+    return Math.round(imageHeight * 9525);
   }
 
   async addLogo(headerXML, logo, headerId) {
@@ -1205,7 +1198,8 @@ class DocxDocument {
 
       return heightEMU; // Return the height of the logo in EMUs
     } catch (error) {
-      console.error('Error processing logo:', error);
+      // eslint-disable-next-line no-console
+      console.warn('Error processing logo:', error);
       return 0; // Return 0 if there was an error
     }
   }
@@ -1327,7 +1321,8 @@ class DocxDocument {
             font.guid = guid;
             fontData = data;
           } catch (error) {
-            console.error('Error converting font:', error);
+            // eslint-disable-next-line no-console
+            console.warn('Error converting font:', error);
             throw new Error(`Error converting font: ${error}`);
           }
         }
@@ -1348,7 +1343,8 @@ class DocxDocument {
           }
         );
       } catch (error) {
-        console.error(`Error embedding font ${font.name}:`, error);
+        // eslint-disable-next-line no-console
+        console.warn(`Error embedding font ${font.name}:`, error);
       }
     }
 

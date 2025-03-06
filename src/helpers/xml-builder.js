@@ -25,7 +25,6 @@ import {
   rgbToHex,
 } from '../utils/color-conversion';
 import {
-  HIPToTWIP,
   percentageRegex,
   pixelRegex,
   pixelToEMU,
@@ -70,40 +69,195 @@ const cssVerticalAlignMapping = {
   inherit: 'center', // Default to center when inheriting
 };
 
+const namedColors = {
+  aliceblue: 'f0f8ff',
+  antiquewhite: 'faebd7',
+  aqua: '00ffff',
+  aquamarine: '7fffd4',
+  azure: 'f0ffff',
+  beige: 'f5f5dc',
+  bisque: 'ffe4c4',
+  black: '000000',
+  blanchedalmond: 'ffebcd',
+  blue: '0000ff',
+  blueviolet: '8a2be2',
+  brown: 'a52a2a',
+  burlywood: 'deb887',
+  cadetblue: '5f9ea0',
+  chartreuse: '7fff00',
+  chocolate: 'd2691e',
+  coral: 'ff7f50',
+  cornflowerblue: '6495ed',
+  cornsilk: 'fff8dc',
+  crimson: 'dc143c',
+  cyan: '00ffff',
+  darkblue: '00008b',
+  darkcyan: '008b8b',
+  darkgoldenrod: 'b8860b',
+  darkgray: 'a9a9a9',
+  darkgreen: '006400',
+  darkgrey: 'a9a9a9',
+  darkkhaki: 'bdb76b',
+  darkmagenta: '8b008b',
+  darkolivegreen: '556b2f',
+  darkorange: 'ff8c00',
+  darkorchid: '9932cc',
+  darkred: '8b0000',
+  darksalmon: 'e9967a',
+  darkseagreen: '8fbc8f',
+  darkslateblue: '483d8b',
+  darkslategray: '2f4f4f',
+  darkslategrey: '2f4f4f',
+  darkturquoise: '00ced1',
+  darkviolet: '9400d3',
+  deeppink: 'ff1493',
+  deepskyblue: '00bfff',
+  dimgray: '696969',
+  dimgrey: '696969',
+  dodgerblue: '1e90ff',
+  firebrick: 'b22222',
+  floralwhite: 'fffaf0',
+  forestgreen: '228b22',
+  fuchsia: 'ff00ff',
+  gainsboro: 'dcdcdc',
+  ghostwhite: 'f8f8ff',
+  gold: 'ffd700',
+  goldenrod: 'daa520',
+  gray: '808080',
+  green: '008000',
+  greenyellow: 'adff2f',
+  grey: '808080',
+  honeydew: 'f0fff0',
+  hotpink: 'ff69b4',
+  indianred: 'cd5c5c',
+  indigo: '4b0082',
+  ivory: 'fffff0',
+  khaki: 'f0e68c',
+  lavender: 'e6e6fa',
+  lavenderblush: 'fff0f5',
+  lawngreen: '7cfc00',
+  lemonchiffon: 'fffacd',
+  lightblue: 'add8e6',
+  lightcoral: 'f08080',
+  lightcyan: 'e0ffff',
+  lightgoldenrodyellow: 'fafad2',
+  lightgray: 'd3d3d3',
+  lightgreen: '90ee90',
+  lightgrey: 'd3d3d3',
+  lightpink: 'ffb6c1',
+  lightsalmon: 'ffa07a',
+  lightseagreen: '20b2aa',
+  lightskyblue: '87cefa',
+  lightslategray: '778899',
+  lightslategrey: '778899',
+  lightsteelblue: 'b0c4de',
+  lightyellow: 'ffffe0',
+  lime: '00ff00',
+  limegreen: '32cd32',
+  linen: 'faf0e6',
+  magenta: 'ff00ff',
+  maroon: '800000',
+  mediumaquamarine: '66cdaa',
+  mediumblue: '0000cd',
+  mediumorchid: 'ba55d3',
+  mediumpurple: '9370db',
+  mediumseagreen: '3cb371',
+  mediumslateblue: '7b68ee',
+  mediumspringgreen: '00fa9a',
+  mediumturquoise: '48d1cc',
+  mediumvioletred: 'c71585',
+  midnightblue: '191970',
+  mintcream: 'f5fffa',
+  mistyrose: 'ffe4e1',
+  moccasin: 'ffe4b5',
+  navajowhite: 'ffdead',
+  navy: '000080',
+  oldlace: 'fdf5e6',
+  olive: '808000',
+  olivedrab: '6b8e23',
+  orange: 'ffa500',
+  orangered: 'ff4500',
+  orchid: 'da70d6',
+  palegoldenrod: 'eee8aa',
+  palegreen: '98fb98',
+  paleturquoise: 'afeeee',
+  palevioletred: 'db7093',
+  papayawhip: 'ffefd5',
+  peachpuff: 'ffdab9',
+  peru: 'cd853f',
+  pink: 'ffc0cb',
+  plum: 'dda0dd',
+  powderblue: 'b0e0e6',
+  purple: '800080',
+  rebeccapurple: '663399',
+  red: 'ff0000',
+  rosybrown: 'bc8f8f',
+  royalblue: '4169e1',
+  saddlebrown: '8b4513',
+  salmon: 'fa8072',
+  sandybrown: 'f4a460',
+  seagreen: '2e8b57',
+  seashell: 'fff5ee',
+  sienna: 'a0522d',
+  silver: 'c0c0c0',
+  skyblue: '87ceeb',
+  slateblue: '6a5acd',
+  slategray: '708090',
+  slategrey: '708090',
+  snow: 'fffafa',
+  springgreen: '00ff7f',
+  steelblue: '4682b4',
+  tan: 'd2b48c',
+  teal: '008080',
+  thistle: 'd8bfd8',
+  tomato: 'ff6347',
+  turquoise: '40e0d0',
+  violet: 'ee82ee',
+  wheat: 'f5deb3',
+  white: 'ffffff',
+  whitesmoke: 'f5f5f5',
+  yellow: 'ffff00',
+  yellowgreen: '9acd32',
+};
+
+const defaultBorderSize = 8;
+
 // eslint-disable-next-line consistent-return
 const fixupColorCode = (colorCodeString) => {
-  if (Object.prototype.hasOwnProperty.call(colorNames, colorCodeString.toLowerCase())) {
-    const [red, green, blue] = colorNames[colorCodeString.toLowerCase()];
+  if (typeof colorCodeString !== 'string') return '000000';
 
-    return rgbToHex(red, green, blue);
-  } else if (rgbRegex.test(colorCodeString)) {
+  const normalizedColor = colorCodeString.toLowerCase().trim();
+
+  // Check named colors first
+  if (namedColors[normalizedColor]) {
+    return namedColors[normalizedColor];
+  } else if (rgbRegex.test(normalizedColor)) {
     const matchedParts = colorCodeString.match(rgbRegex);
     const red = matchedParts[1];
     const green = matchedParts[2];
     const blue = matchedParts[3];
 
     return rgbToHex(red, green, blue);
-  } else if (hslRegex.test(colorCodeString)) {
+  } else if (hslRegex.test(normalizedColor)) {
     const matchedParts = colorCodeString.match(hslRegex);
     const hue = matchedParts[1];
     const saturation = matchedParts[2];
     const luminosity = matchedParts[3];
 
     return hslToHex(hue, saturation, luminosity);
-  } else if (hexRegex.test(colorCodeString)) {
+  } else if (hexRegex.test(normalizedColor)) {
     const matchedParts = colorCodeString.match(hexRegex);
-
     return matchedParts[1];
-  } else if (hex3Regex.test(colorCodeString)) {
+  } else if (hex3Regex.test(normalizedColor)) {
     const matchedParts = colorCodeString.match(hex3Regex);
     const red = matchedParts[1];
     const green = matchedParts[2];
     const blue = matchedParts[3];
 
     return hex3ToHex(red, green, blue);
-  } else {
-    return '000000';
   }
+
+  return '000000'; // Default to black if color is invalid
 };
 
 const recursiveRunOrHyperlink = async (vNode, attributes, docxDocumentInstance) => {
@@ -261,21 +415,34 @@ const buildTextElement = (text) =>
 
 // eslint-disable-next-line consistent-return
 const fixupLineHeight = (lineHeight, fontSize) => {
-  // FIXME: If line height is anything other than a number
+  // If lineHeight is a unitless number
   // eslint-disable-next-line no-restricted-globals
-  if (!isNaN(lineHeight)) {
+  if (!isNaN(lineHeight) && !lineHeight.toString().includes('px')) {
     if (fontSize) {
-      const actualLineHeight = +lineHeight * fontSize;
-
-      return HIPToTWIP(actualLineHeight);
+      // Convert fontSize from half-points to points (divide by 2)
+      const fontSizeInPoints = fontSize / 2;
+      // Calculate actual line height in points
+      const lineHeightInPoints = fontSizeInPoints * lineHeight;
+      // Convert to TWIPs (20 TWIPs per point)
+      return lineHeightInPoints * 20;
     } else {
-      // 240 TWIP or 12 point is default line height
-      return +lineHeight * 240;
+      // If no fontSize is specified, use default font size (typically 11pt)
+      const defaultFontSize = 11;
+      return defaultFontSize * lineHeight * 20;
     }
-  } else {
-    // 240 TWIP or 12 point is default line height
-    return 240;
+  } else if (typeof lineHeight === 'string') {
+    // Handle existing px, pt, etc. conversions
+    if (pointRegex.test(lineHeight)) {
+      const matchedParts = lineHeight.match(pointRegex);
+      return pointToTWIP(matchedParts[1]);
+    } else if (pixelRegex.test(lineHeight)) {
+      const matchedParts = lineHeight.match(pixelRegex);
+      return pixelToTWIP(matchedParts[1]);
+    }
   }
+
+  // Default line height (240 TWIPs = 12pt)
+  return 240;
 };
 
 // eslint-disable-next-line consistent-return
@@ -348,7 +515,14 @@ const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes,
         style['line-height'],
         modifiedAttributes.fontSize
       );
+    } else if (!modifiedAttributes.lineHeight && docxDocumentInstance.defaultLineHeight) {
+      // Apply default line height if none is specified
+      modifiedAttributes.lineHeight = fixupLineHeight(
+        docxDocumentInstance.defaultLineHeight,
+        modifiedAttributes.fontSize
+      );
     }
+
     if (style['margin-top']) {
       modifiedAttributes.marginTop = fixupMargin(style['margin-top']);
     }
@@ -795,9 +969,20 @@ const buildSpacing = (lineSpacing, beforeSpacing, afterSpacing) => {
   const spacingFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'spacing');
 
   if (lineSpacing || lineSpacing === 0) {
-    spacingFragment.att('@w', 'line', lineSpacing);
+    // Base line height
+    spacingFragment.att('@w', 'line', '240'); // Standard line height
     spacingFragment.att('@w', 'lineRule', 'auto');
+
+    // Calculate extra spacing
+    const extraSpace = lineSpacing - 240;
+    if (extraSpace > 0) {
+      const halfSpace = Math.floor(extraSpace / 2);
+      spacingFragment.att('@w', 'before', halfSpace);
+      spacingFragment.att('@w', 'after', halfSpace);
+    }
   }
+
+  // Handle explicit before/after spacing if provided
   if (beforeSpacing || beforeSpacing === 0) {
     spacingFragment.att('@w', 'before', beforeSpacing);
   }
@@ -806,7 +991,6 @@ const buildSpacing = (lineSpacing, beforeSpacing, afterSpacing) => {
   }
 
   spacingFragment.up();
-
   return spacingFragment;
 };
 
@@ -875,7 +1059,32 @@ const buildParagraphProperties = (attributes) => {
     '@w',
     'pPr'
   );
+
   if (attributes && attributes.constructor === Object) {
+    // Always handle line height first
+    const fontSize = attributes.fontSize || 22; // Default 11pt = 22 half-points
+    const lineHeight = attributes.lineHeight || fontSize * 1.5 * 20; // 1.5 is default line height
+
+    // Calculate spacing
+    const baseLineHeight = fontSize * 20; // Convert fontSize to TWIPs
+    const extraSpace = lineHeight - baseLineHeight;
+    const halfSpace = Math.floor(extraSpace / 2);
+
+    // Apply base spacing with even distribution
+    const spacingFragment = fragment({ namespaceAlias: { w: namespaces.w } })
+      .ele('@w', 'spacing')
+      .att('@w', 'line', baseLineHeight)
+      .att('@w', 'lineRule', 'atLeast');
+
+    if (extraSpace > 0) {
+      spacingFragment.att('@w', 'before', halfSpace);
+      spacingFragment.att('@w', 'after', halfSpace);
+    }
+
+    spacingFragment.up();
+    paragraphPropertiesFragment.import(spacingFragment);
+
+    // Handle all other attributes
     Object.keys(attributes).forEach((key) => {
       if (typeof attributes[key] === 'undefined' && !attributes[key]) {
         return;
@@ -885,25 +1094,19 @@ const buildParagraphProperties = (attributes) => {
           const { levelId, numberingId } = attributes[key];
           const numberingPropertiesFragment = buildNumberingProperties(levelId, numberingId);
           paragraphPropertiesFragment.import(numberingPropertiesFragment);
-          // eslint-disable-next-line no-param-reassign
           delete attributes.numbering;
           break;
         case 'textAlign':
           const horizontalAlignmentFragment = buildHorizontalAlignment(attributes[key]);
           paragraphPropertiesFragment.import(horizontalAlignmentFragment);
-          // eslint-disable-next-line no-param-reassign
           delete attributes.textAlign;
           break;
         case 'backgroundColor':
-          // Add shading to Paragraph Properties only if display is block
-          // Essentially if background color needs to be across the row
           if (attributes.display === 'block') {
             const shadingFragment = buildShading(attributes[key]);
             paragraphPropertiesFragment.import(shadingFragment);
-            // FIXME: Inner padding in case of shaded paragraphs.
             const paragraphBorderFragment = buildParagraphBorder();
             paragraphPropertiesFragment.import(paragraphBorderFragment);
-            // eslint-disable-next-line no-param-reassign
             delete attributes.backgroundColor;
           }
           break;
@@ -915,50 +1118,20 @@ const buildParagraphProperties = (attributes) => {
         case 'indentation':
           const indentationFragment = buildIndentation(attributes[key]);
           paragraphPropertiesFragment.import(indentationFragment);
-          // eslint-disable-next-line no-param-reassign
           delete attributes.indentation;
           break;
+        // Handle explicit margin overrides
+        case 'marginTop':
+          spacingFragment.att('@w', 'before', attributes[key]);
+          break;
         case 'marginBottom':
-          const spacingAfterFragment = buildSpacing(null, null, attributes[key]);
-          paragraphPropertiesFragment.import(spacingAfterFragment);
+          spacingFragment.att('@w', 'after', attributes[key]);
           break;
       }
     });
-
-    // Only add spacing if we have actual content or specific styles
-    if (!attributes || (!attributes.isSpacerParagraph && Object.keys(attributes).length === 0)) {
-      paragraphPropertiesFragment
-        .ele('w:spacing')
-        .att('w:line', '0')
-        .att('w:lineRule', 'auto')
-        .att('w:before', '0')
-        .att('w:after', '0')
-        .up();
-      return paragraphPropertiesFragment;
-    }
-
-    // Only add spacing if it's explicitly defined
-    if (attributes.lineHeight || attributes.marginTop || attributes.marginBottom) {
-      const spacingFragment = buildSpacing(
-        attributes.lineHeight,
-        attributes.marginTop,
-        attributes.marginBottom
-      );
-      // eslint-disable-next-line no-param-reassign
-      delete attributes.lineHeight;
-      // eslint-disable-next-line no-param-reassign
-      delete attributes.beforeSpacing;
-      // eslint-disable-next-line no-param-reassign
-      delete attributes.afterSpacing;
-      paragraphPropertiesFragment.import(spacingFragment);
-    } else {
-      // but to prevent additional spacing unwanted.
-      const spacingAfterFragment = buildSpacing(0, 0, 0);
-      paragraphPropertiesFragment.import(spacingAfterFragment);
-    }
   }
-  paragraphPropertiesFragment.up();
 
+  paragraphPropertiesFragment.up();
   return paragraphPropertiesFragment;
 };
 
@@ -1354,6 +1527,7 @@ async function resizeNestedTable(vNode, parentColumnWidth, docxDocumentInstance)
         // eslint-disable-next-line no-use-before-define
         const tableRowFragment = await buildTableRow(docxDocumentInstance, childVNode.children, {
           width,
+          rowVNode: childVNode,
         });
         tableFragment.import(tableRowFragment);
       } else if (childVNode.tagName === 'table') {
@@ -1413,10 +1587,91 @@ const parseCSSSpacing = (style, property) => {
   return null;
 };
 
+const parseBorderStyle = (borderStyle) => {
+  if (!borderStyle) return {};
+
+  // Match width, style, and color in any order
+  // First extract any rgb/rgba values to prevent splitting them
+  const rgbMatches = borderStyle.match(/rgba?\([^)]+\)|hsla?\([^)]+\)/g) || [];
+  let remainingStyle = borderStyle;
+  const rgbPlaceholders = {};
+
+  // Replace rgb/rgba/hsl/hsla values with placeholders
+  rgbMatches.forEach((match, index) => {
+    // Ensure the match is properly formatted
+    if (
+      !match.match(/^(rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)|hsla?\([^)]+\))$/)
+    ) {
+      // eslint-disable-next-line no-console
+      console.warn(`Invalid color format found in border style: ${match}`);
+      return;
+    }
+    const placeholder = `__COLOR_${index}__`;
+    rgbPlaceholders[placeholder] = match;
+    remainingStyle = remainingStyle.replace(match, placeholder);
+  });
+
+  const parts = remainingStyle.split(/\s+/);
+  const result = {};
+
+  parts.forEach((part) => {
+    // Restore rgb values from placeholders
+    const actualPart = rgbPlaceholders[part] || part;
+
+    if (actualPart.match(/^[0-9]+(\.[0-9]+)?(px|pt|em|rem)$/)) {
+      result.width = parseInt(actualPart);
+    } else if (
+      actualPart.match(/^(none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset)$/)
+    ) {
+      // Convert CSS border styles to OOXML border types
+      switch (actualPart) {
+        case 'solid':
+          result.style = 'single';
+          break;
+        case 'none':
+        case 'hidden':
+          result.style = 'none';
+          break;
+        case 'dotted':
+          result.style = 'dotted';
+          break;
+        case 'dashed':
+          result.style = 'dashed';
+          break;
+        case 'double':
+          result.style = 'double';
+          break;
+        // For other styles, default to 'single'
+        default:
+          result.style = 'single';
+      }
+    } else if (
+      actualPart.match(/^(rgb|rgba|#|hsl|hsla)/i) ||
+      Object.prototype.hasOwnProperty.call(colorNames, actualPart.toLowerCase())
+    ) {
+      try {
+        result.color = fixupColorCode(actualPart);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.warn(`Error parsing color value: ${actualPart}`, error);
+        result.color = '000000'; // Fallback to black
+      }
+    }
+  });
+
+  return result;
+};
+
+const getBorderPriority = (border) => {
+  if (!border) return 0;
+  return border.size * 8; // Convert to twips for comparison
+};
+
 const buildTableRow = async function buildTableRow(docxDocumentInstance, columns, attributes = {}) {
+  const { rowContext, rowVNode } = attributes;
   const width = attributes.width || attributes.maximumWidth || '100%';
   const tableRowFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tr');
-
+  const rowBgFallback = rowVNode.properties?.style?.['background-color'] || false;
   const needsRowHeight = columns.some((column) => {
     const style = column.properties?.style || {};
     const hasPadding = [
@@ -1447,10 +1702,34 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
   } else {
     trPr.ele('@w', 'trHeight').att('@w', 'hRule', 'atLeast'); // atLeast ensures minimum height while allowing expansion if needed
   }
+  /**
+   * Order of precedence on neighbouring cells:
+   *
+   * If border-collapse is not set (separated borders):
+   *
+   * Both borders are drawn with the cell's left border appearing to the right of the previous cell's right border
+   * This creates a double border effect
+   *
+   *
+   * If border-collapse is set:
+   *
+   * The wider border wins (higher w:sz value)
+   * If borders are equal width, the second cell's border (left border) wins
+   * This is similar to CSS border-collapse behavior
+   *
+   * @type {null}
+   */
+  let previousCellRightBorder = null;
 
   // Process each column
   // eslint-disable-next-line no-restricted-syntax
-  for (const column of columns) {
+  for (const [columnIndex, column] of columns.entries()) {
+    const cellContext = {
+      isFirstRow: rowContext?.isFirstRow || false,
+      isLastRow: rowContext?.isLastRow || false,
+      isFirstColumn: columnIndex === 0,
+      isLastColumn: columnIndex === (rowContext?.totalColumns || columns.length) - 1,
+    };
     const colspan = parseInt(column.properties?.colSpan || '1', 10);
     const totalPadding = columns.length * 200;
     let colWidth = 'auto';
@@ -1476,18 +1755,9 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
     const align = column.properties?.style?.['text-align'];
     const vAlign = column.properties?.attributes?.valign;
     const cssVAlign = column.properties?.style?.['vertical-align'];
-    let cellBgOverride = column.properties?.style?.['background-color'] || false;
-
+    let cellBgOverride = column.properties?.style?.['background-color'] || rowBgFallback || false;
     if (cellBgOverride) {
-      // Convert RGB to hex if necessary
-      if (cellBgOverride.startsWith('rgb')) {
-        const rgb = cellBgOverride.match(/\d+/g);
-        if (rgb && rgb.length === 3) {
-          cellBgOverride = rgbToHex(parseInt(rgb[0]), parseInt(rgb[1]), parseInt(rgb[2]));
-        }
-      }
-      // Remove '#' if present
-      cellBgOverride = cellBgOverride.replace('#', '');
+      cellBgOverride = fixupColorCode(cellBgOverride);
     }
 
     // eslint-disable-next-line no-nested-ternary
@@ -1506,8 +1776,30 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
         }
       });
     }
-
+    const cellBorders = {};
     const style = column.properties?.style || {};
+    ['top', 'right', 'bottom', 'left'].forEach((side) => {
+      const borderStyle = style[`border-${side}`] || style.border;
+      if (borderStyle) {
+        const border = parseBorderStyle(borderStyle);
+        if (border && border.width > 0) {
+          cellBorders[side] = {
+            size: border.width,
+            color: border.color || '000000',
+            stroke: border.style || 'single',
+          };
+        }
+      }
+    });
+
+    // If we have a default border and no specific border is set, apply the default
+    if (attributes.defaultBorder) {
+      ['top', 'right', 'bottom', 'left'].forEach((side) => {
+        if (!cellBorders[side]) {
+          cellBorders[side] = { ...attributes.defaultBorder };
+        }
+      });
+    }
 
     // Calculate margins from both padding and margin
     const leftSpace =
@@ -1553,6 +1845,65 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
       .att('@w', 'w', rightSpace.toString())
       .att('@w', 'type', 'dxa')
       .up();
+
+    // Handle border collision for collapsed borders
+    if (attributes.borderCollapse === 'collapse' && columnIndex > 0) {
+      const currentLeftBorder = cellBorders.left;
+
+      if (currentLeftBorder || previousCellRightBorder) {
+        const leftPriority = getBorderPriority(currentLeftBorder);
+        const rightPriority = getBorderPriority(previousCellRightBorder);
+
+        // Remove the losing border
+        if (leftPriority >= rightPriority) {
+          // Current cell's left border wins or equals (keeps its border)
+          delete cellBorders.left;
+        } else {
+          // Previous cell's right border wins
+          previousCellRightBorder = null;
+        }
+      }
+    }
+
+    // Store right border for next iteration
+    previousCellRightBorder = cellBorders.right;
+
+    if (Object.keys(cellBorders).length > 0) {
+      const tcBorders = tableCellFragment.first().ele('w:tcBorders');
+      // eslint-disable-next-line no-loop-func
+      Object.entries(cellBorders).forEach(([side, border]) => {
+        // Skip right border if it lost to next cell's left border
+        if (side === 'right' && previousCellRightBorder === null) {
+          return;
+        }
+
+        const isOuterBorder =
+          (side === 'top' && cellContext.isFirstRow) ||
+          (side === 'bottom' && cellContext.isLastRow) ||
+          (side === 'left' && cellContext.isFirstColumn) ||
+          (side === 'right' && cellContext.isLastColumn);
+
+        // For default borders from border="1", always apply them
+        const isDefaultBorder = border === attributes.defaultBorder;
+        // Apply border if it's either a default border or meets the normal criteria
+
+        if (
+          border.size > 0 &&
+          (isDefaultBorder ||
+            !isOuterBorder ||
+            !attributes.tableBorders ||
+            !attributes.borderCollapse)
+        ) {
+          tcBorders
+            .ele(`@w`, side)
+            .att('@w', 'val', 'single')
+            .att('@w', 'sz', border.size * 8)
+            .att('@w', 'color', border.color)
+            .up();
+        }
+      });
+      tcBorders.up();
+    }
 
     if (cellBgOverride || attributes.backgroundColor) {
       const bgColour = cellBgOverride || attributes.backgroundColor;
@@ -1611,60 +1962,89 @@ const buildTableGrid = (vNode, attributes) => {
 };
 
 const buildTableProperties = (attributes) => {
-  const { maximumWidth, width, jc } = attributes;
   const tableFragment = fragment({ namespaceAlias: { w: namespaces.w } });
   const tableProperties = tableFragment.ele('@w', 'tblPr');
-  if (width || maximumWidth) {
+
+  // Handle table width
+  if (attributes.width || attributes.maximumWidth) {
     tableProperties
       .ele('@w', 'tblW')
-      .att('@w', 'w', Math.round(((width || maximumWidth) / 100) * 5000))
+      .att('@w', 'w', Math.round(((attributes.width || attributes.maximumWidth) / 100) * 5000))
       .att('@w', 'type', 'dxa');
   }
-  if (jc) {
-    tableProperties.ele('@w', 'jc').att('@w', 'val', jc);
+
+  // Handle justification
+  if (attributes.jc) {
+    tableProperties.ele('@w', 'jc').att('@w', 'val', attributes.jc);
   }
 
-  // Add table borders if present
-  if (attributes.tableBorders) {
+  // Handle border collapse and borders
+  if (attributes.borderCollapse === 'collapse') {
     const tblBorders = tableProperties.ele('@w', 'tblBorders');
 
-    ['top', 'left', 'bottom', 'right'].forEach((side) => {
-      tblBorders
-        .ele('@w', side)
-        .att('@w', 'val', attributes.tableBorders.stroke)
-        .att('@w', 'sz', attributes.tableBorders[side] * 8)
-        .att('@w', 'color', attributes.tableBorders.color);
-    });
+    // For collapsed borders, table borders take precedence
+    if (attributes.defaultBorder || attributes.tableBorders) {
+      // If we have a default border, apply it to all sides
+      if (attributes.tableBorders) {
+        // Handle outer borders
+        ['top', 'left', 'bottom', 'right'].forEach((side) => {
+          const border = attributes.tableBorders[side];
+          if (border && border.size > 0) {
+            tblBorders
+              .ele(`@w`, side)
+              .att('@w', 'val', border.stroke || 'single')
+              .att('@w', 'sz', border.size * 8)
+              .att('@w', 'color', border.color);
+          }
+        });
 
-    if (attributes.tableBorders.insideH || attributes.tableBorders.insideV) {
-      ['insideH', 'insideV'].forEach((side) => {
-        if (attributes.tableBorders[side]) {
-          tblBorders
-            .ele('@w', side)
-            .att('@w', 'val', attributes.tableBorders.stroke)
-            .att('@w', 'sz', attributes.tableBorders[side] * 8)
-            .att('@w', 'color', attributes.tableBorders.color);
-        }
-      });
+        // Handle inside borders
+        ['insideH', 'insideV'].forEach((side) => {
+          if (attributes.tableBorders[side]) {
+            tblBorders
+              .ele(`@w`, side)
+              .att('@w', 'val', 'single')
+              .att('@w', 'sz', attributes.tableBorders[side] * 8)
+              .att('@w', 'color', attributes.tableBorders.color);
+          }
+        });
+      }
+
+      if (attributes.defaultBorder) {
+        ['top', 'left', 'bottom', 'right', 'insideH', 'insideV'].forEach((side) => {
+          if (!attributes.tableBorders[side]) {
+            tblBorders
+              .ele(`@w`, side)
+              .att('@w', 'val', 'single')
+              .att('@w', 'sz', attributes.defaultBorder.size * 8)
+              .att('@w', 'color', attributes.defaultBorder.color);
+          }
+        });
+      }
     }
+    tblBorders.up();
   }
 
+  // Handle table layout
   tableProperties.ele('@w', 'tblLayout').att('@w', 'type', 'fixed');
 
+  // Handle cell margins
   const tableCellMargins = tableProperties.ele('@w', 'tblCellMar');
 
+  // Add table indent
   tableCellMargins.ele('@w', 'tblInd').att('@w', 'w', 0).att('@w', 'type', 'dxa');
 
+  // Handle directional margins
   ['top', 'left', 'bottom', 'right'].forEach((direction) => {
+    const marginKey = `cellMargin${direction.charAt(0).toUpperCase()}${direction.slice(1)}`;
     tableCellMargins
       .ele('@w', direction)
-      .att(
-        '@w',
-        'w',
-        attributes[`cellMargin${direction.charAt(0).toUpperCase()}${direction.slice(1)}`] || 0
-      )
+      .att('@w', 'w', attributes[marginKey] || 0)
       .att('@w', 'type', 'dxa');
   });
+
+  tableCellMargins.up();
+  tableProperties.up();
 
   return tableFragment;
 };
@@ -1735,135 +2115,106 @@ const buildTableGridFromTableRow = (vNode, width) => {
 
   return tableGridFragment;
 };
-const parseBorderStyle = (borderStyle) => {
-  if (!borderStyle) return {};
 
-  // Match width, style, and color in any order
-  // First extract any rgb/rgba values to prevent splitting them
-  const rgbMatches = borderStyle.match(/rgba?\([^)]+\)|hsla?\([^)]+\)/g) || [];
-  let remainingStyle = borderStyle;
-  const rgbPlaceholders = {};
-
-  // Replace rgb/rgba/hsl/hsla values with placeholders
-  rgbMatches.forEach((match, index) => {
-    // Ensure the match is properly formatted
-    if (
-      !match.match(/^(rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)|hsla?\([^)]+\))$/)
-    ) {
-      // eslint-disable-next-line no-console
-      console.warn(`Invalid color format found in border style: ${match}`);
-      return;
-    }
-    const placeholder = `__COLOR_${index}__`;
-    rgbPlaceholders[placeholder] = match;
-    remainingStyle = remainingStyle.replace(match, placeholder);
-  });
-
-  const parts = remainingStyle.split(/\s+/);
-  const result = {};
-
-  parts.forEach((part) => {
-    // Restore rgb values from placeholders
-    const actualPart = rgbPlaceholders[part] || part;
-
-    if (actualPart.match(/^[0-9]+(\.[0-9]+)?(px|pt|em|rem)$/)) {
-      result.width = parseInt(actualPart);
-    } else if (
-      actualPart.match(/^(none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset)$/)
-    ) {
-      result.style = actualPart;
-    } else if (
-      actualPart.match(/^(rgb|rgba|#|hsl|hsla)/i) ||
-      Object.prototype.hasOwnProperty.call(colorNames, actualPart.toLowerCase())
-    ) {
-      try {
-        result.color = fixupColorCode(actualPart);
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn(`Error parsing color value: ${actualPart}`, error);
-        result.color = '000000'; // Fallback to black
-      }
-    }
-  });
-
-  return result;
-};
 const buildTable = async (vNode, attributes, docxDocumentInstance) => {
   const tableFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tbl');
   const modifiedAttributes = { ...attributes };
 
+  const tableStyles = vNode.properties?.style || {};
+  const tableAttributes = vNode.properties?.attributes || {};
+
+  // Handle basic border="1" attribute
+  if (tableAttributes.border) {
+    modifiedAttributes.defaultBorder = {
+      size: parseInt(tableAttributes.border, 10),
+      color: '000000',
+      stroke: 'single',
+    };
+  }
+
   if (isVNode(vNode) && vNode.properties) {
-    const tableAttributes = vNode.properties.attributes || {};
-    const tableStyles = vNode.properties.style || {};
-
-    // Check if border-style is hidden - this takes precedence over border attribute
-    if (tableStyles['border-style'] === 'hidden') {
-      modifiedAttributes.tableBorders = {
-        top: 0,
-        bottom: 0,
-        left: 0,
-        right: 0,
-        stroke: 'none',
-        color: 'auto',
-      };
-    } else {
-      // Initialize border properties
-      // eslint-disable-next-line prefer-const
-      let [borderSize, borderStrike, borderColor] = [0, 'single', '000000'];
-
-      // Check HTML border attribute
-      // eslint-disable-next-line no-restricted-globals
-      if (!isNaN(tableAttributes.border)) {
-        borderSize = parseInt(tableAttributes.border, 10);
-      }
-
-      if (tableStyles?.border) {
-        const border = parseBorderStyle(tableStyles.border);
-        borderSize = border.width || borderSize;
-        borderColor = border.color || borderColor;
-      }
-
-      if (tableStyles?.['border-color']) {
-        const border = parseBorderStyle(tableStyles['border-color']);
-        borderColor = border.color || borderColor;
-      }
-
-      if (
-        tableStyles['background-color'] &&
-        !colorlessColors.includes(tableStyles['background-color'])
-      ) {
-        modifiedAttributes.backgroundColor = fixupColorCode(tableStyles['background-color']);
-      }
-
-      if (tableStyles?.['border-width']) {
-        const parsed = String(tableStyles?.['border-width']).replace(/[^0-9.]/g, '');
-        const parsedBorderWidth = parsed === '' ? false : parseInt(parsed);
-        if (parsedBorderWidth !== false) {
-          borderSize = parsedBorderWidth;
-        }
-      }
-
-      if (tableStyles?.['border-style'] && tableStyles?.['border-style'] === 'none') {
-        borderSize = 0;
-      }
-
-      // Only add borders if we have a size > 0
-      if (borderSize > 0) {
-        modifiedAttributes.tableBorders = {
-          top: borderSize,
-          bottom: borderSize,
-          left: borderSize,
-          right: borderSize,
-          stroke: borderStrike,
-          color: borderColor,
+    // Border processing
+    const processBorders = (styles, attrs) => {
+      if (styles['border-style'] === 'hidden') {
+        return {
+          top: { size: 0, stroke: 'none', color: 'auto' },
+          bottom: { size: 0, stroke: 'none', color: 'auto' },
+          left: { size: 0, stroke: 'none', color: 'auto' },
+          right: { size: 0, stroke: 'none', color: 'auto' },
         };
+      }
 
-        // Add inside borders for collapsed tables
-        if (tableStyles['border-collapse'] === 'collapse') {
-          modifiedAttributes.tableBorders.insideH = borderSize;
-          modifiedAttributes.tableBorders.insideV = borderSize;
+      const borders = {
+        top: { size: 0, color: '000000', stroke: 'single' },
+        bottom: { size: 0, color: '000000', stroke: 'single' },
+        left: { size: 0, color: '000000', stroke: 'single' },
+        right: { size: 0, color: '000000', stroke: 'single' },
+      };
+
+      // Process general border settings
+
+      // eslint-disable-next-line no-restricted-globals
+      if (!isNaN(attrs.border)) {
+        const size = parseInt(attrs.border, 10);
+        Object.keys(borders).forEach((side) => {
+          borders[side].size = size;
+        });
+      }
+
+      // Process border shorthand
+      if (styles.border) {
+        const border = parseBorderStyle(styles.border);
+        if (border) {
+          Object.keys(borders).forEach((side) => {
+            borders[side].size = border.width || borders[side].size;
+            borders[side].color = border.color || borders[side].color;
+            borders[side].stroke = border.style || borders[side].stroke;
+          });
         }
       }
+
+      // Process individual borders
+      ['top', 'right', 'bottom', 'left'].forEach((side) => {
+        if (styles[`border-${side}`]) {
+          const border = parseBorderStyle(styles[`border-${side}`]);
+          if (border) {
+            borders[side].size = border.width || borders[side].size;
+            borders[side].color = border.color || borders[side].color;
+            borders[side].stroke = border.style || borders[side].stroke;
+          }
+        }
+      });
+
+      // Check if any borders are defined
+      if (Object.values(borders).some((border) => border.size > 0)) {
+        return borders;
+      }
+
+      return null;
+    };
+
+    const borderSettings = processBorders(tableStyles, tableAttributes);
+    if (borderSettings) {
+      modifiedAttributes.tableBorders = borderSettings;
+
+      if (tableStyles['border-collapse'] === 'collapse') {
+        modifiedAttributes.borderCollapse = 'collapse';
+        modifiedAttributes.tableBorders.insideH = Math.max(
+          borderSettings.top,
+          borderSettings.bottom
+        );
+        modifiedAttributes.tableBorders.insideV = Math.max(
+          borderSettings.left,
+          borderSettings.right
+        );
+      }
+    }
+
+    if (
+      tableStyles['background-color'] &&
+      !colorlessColors.includes(tableStyles['background-color'])
+    ) {
+      modifiedAttributes.backgroundColor = fixupColorCode(tableStyles['background-color']);
     }
 
     let minimumWidth;
@@ -1875,7 +2226,6 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
         minimumWidth = pixelToTWIP(tableStyles['min-width'].match(pixelRegex)[1]);
       } else if (percentageRegex.test(tableStyles['min-width'])) {
         const percentageValue = tableStyles['min-width'].match(percentageRegex)[1];
-
         minimumWidth = Math.round((percentageValue / 100) * attributes.maximumWidth);
       }
     }
@@ -1891,6 +2241,7 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
     ) {
       modifiedAttributes.jc = 'center';
     }
+
     if (tableStyles['max-width']) {
       if (pixelRegex.test(tableStyles['max-width'])) {
         pixelRegex.lastIndex = 0;
@@ -1901,6 +2252,7 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
         maximumWidth = Math.round((percentageValue / 100) * attributes.maximumWidth);
       }
     }
+
     if (tableStyles.width) {
       if (pixelRegex.test(tableStyles.width)) {
         pixelRegex.lastIndex = 0;
@@ -1927,8 +2279,6 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
       modifiedAttributes.width = Math.min(modifiedAttributes.width, attributes.maximumWidth);
     }
   }
-
-  // Count the number of columns
   let columnCount = 0;
   if (vNodeHasChildren(vNode)) {
     const firstRow = vNode.children.find(
@@ -1949,41 +2299,59 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
     }
   }
 
-  const paddingPerCell = 0; // 100 twips left + 100 twips right
+  const paddingPerCell = 0;
   const totalPadding = columnCount * paddingPerCell;
   if (modifiedAttributes.width) {
     modifiedAttributes.width = Math.max(modifiedAttributes.width - totalPadding, 0);
   }
 
   const tablePropertiesFragment = buildTableProperties(modifiedAttributes);
-  tableFragment.import(tablePropertiesFragment);
 
-  // Add table borders if size > 0
+  tableFragment.import(tablePropertiesFragment);
   if (modifiedAttributes.tableBorders) {
     const tblBorders = tablePropertiesFragment.ele('@w', 'tblBorders');
 
-    // Add border for each side
+    // Table borders should be applied with full strength when border-collapse is set
     ['top', 'left', 'bottom', 'right'].forEach((side) => {
-      tblBorders
-        .ele('@w', side)
-        .att('@w', 'val', modifiedAttributes.tableBorders.stroke)
-        .att('@w', 'sz', modifiedAttributes.tableBorders[side] * 8)
-        .att('@w', 'color', modifiedAttributes.tableBorders.color);
+      if (modifiedAttributes.tableBorders[side] > 0) {
+        tblBorders
+          .ele('@w', side)
+          .att('w:val', modifiedAttributes.tableBorders.stroke)
+          .att('w:sz', modifiedAttributes.tableBorders[side] * defaultBorderSize)
+          .att('w:color', modifiedAttributes.tableBorders.color);
+      }
     });
 
-    // Add inside borders for collapsed borders
-    if (modifiedAttributes.tableBorders.insideH || modifiedAttributes.tableBorders.insideV) {
+    // Inside borders
+    if (tableStyles['border-collapse'] === 'collapse') {
+      modifiedAttributes.borderCollapse = 'collapse';
       ['insideH', 'insideV'].forEach((side) => {
         if (modifiedAttributes.tableBorders[side]) {
           tblBorders
             .ele('@w', side)
-            .att('@w', 'val', modifiedAttributes.tableBorders.stroke)
-            .att('@w', 'sz', modifiedAttributes.tableBorders[side] * 8)
-            .att('@w', 'color', modifiedAttributes.tableBorders.color);
+            .att('w:val', 'single')
+            .att('w:sz', modifiedAttributes.tableBorders[side] * defaultBorderSize)
+            .att('w:color', modifiedAttributes.tableBorders.color);
         }
       });
     }
+
+    tblBorders.up();
   }
+
+  let totalRows = 0;
+  // Count total rows
+  if (vNodeHasChildren(vNode)) {
+    vNode.children.forEach((child) => {
+      if (child.tagName === 'tr') {
+        totalRows++;
+      } else if (child.tagName === 'thead' || child.tagName === 'tbody') {
+        totalRows += child.children.filter((grandChild) => grandChild.tagName === 'tr').length;
+      }
+    });
+  }
+
+  let currentRowIndex = 0;
 
   let hasGrid = false;
   if (vNodeHasChildren(vNode)) {
@@ -1997,7 +2365,6 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
         for (let iteratorIndex = 0; iteratorIndex < childVNode.children.length; iteratorIndex++) {
           const grandChildVNode = childVNode.children[iteratorIndex];
           if (grandChildVNode.tagName === 'tr') {
-            // Extract the <td> or <th> elements as columns
             const columns = grandChildVNode.children.filter(
               (child) => child.tagName === 'td' || child.tagName === 'th'
             );
@@ -2011,19 +2378,28 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
                 tableFragment.import(tableGridFragment);
               }
             }
-            const tableRowFragment = await buildTableRow(
-              docxDocumentInstance,
-              columns,
-              modifiedAttributes
-            );
+
+            // Add row context
+            const rowContext = {
+              isFirstRow: currentRowIndex === 0,
+              isLastRow: currentRowIndex === totalRows - 1,
+              totalColumns: columns.length,
+            };
+
+            const tableRowFragment = await buildTableRow(docxDocumentInstance, columns, {
+              ...modifiedAttributes,
+              rowContext,
+              rowVNode: childVNode,
+            });
             tableFragment.import(tableRowFragment);
+
+            currentRowIndex++;
           }
         }
       } else if (childVNode.tagName === 'tbody') {
         for (let iteratorIndex = 0; iteratorIndex < childVNode.children.length; iteratorIndex++) {
           const grandChildVNode = childVNode.children[iteratorIndex];
           if (grandChildVNode.tagName === 'tr') {
-            // Extract the <td> or <th> elements as columns
             const columns = grandChildVNode.children.filter(
               (child) => child.tagName === 'td' || child.tagName === 'th'
             );
@@ -2037,19 +2413,33 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
                 tableFragment.import(tableGridFragment);
               }
             }
-            const tableRowFragment = await buildTableRow(
-              docxDocumentInstance,
-              columns,
-              modifiedAttributes
-            );
+
+            // Add row context
+            const rowContext = {
+              isFirstRow: currentRowIndex === 0,
+              isLastRow: currentRowIndex === totalRows - 1,
+              totalColumns: columns.length,
+            };
+            const tableRowFragment = await buildTableRow(docxDocumentInstance, columns, {
+              ...modifiedAttributes,
+              rowContext,
+              rowVNode: grandChildVNode,
+            });
             tableFragment.import(tableRowFragment);
+            currentRowIndex++;
           }
         }
       } else if (childVNode.tagName === 'tr') {
-        // Extract the <td> or <th> elements as columns
         const columns = childVNode.children.filter(
           (child) => child.tagName === 'td' || child.tagName === 'th'
         );
+
+        // Add row context
+        const rowContext = {
+          isFirstRow: currentRowIndex === 0,
+          isLastRow: currentRowIndex === totalRows - 1,
+          totalColumns: columns.length,
+        };
 
         if (index === 0 && !hasGrid) {
           const tableGridFragment = buildTableGridFromTableRow(
@@ -2061,17 +2451,18 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
           }
         }
 
-        const tableRowFragment = await buildTableRow(
-          docxDocumentInstance,
-          columns,
-          modifiedAttributes
-        );
+        const tableRowFragment = await buildTableRow(docxDocumentInstance, columns, {
+          ...modifiedAttributes,
+          rowContext,
+          rowVNode: childVNode,
+        });
         tableFragment.import(tableRowFragment);
+        currentRowIndex++;
       }
     }
   }
 
-  tableFragment.up(); // Complete the table fragment.
+  tableFragment.up();
   return tableFragment;
 };
 
