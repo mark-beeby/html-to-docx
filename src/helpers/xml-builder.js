@@ -421,14 +421,12 @@ const fixupLineHeight = (lineHeight, fontSize) => {
     if (fontSize) {
       // Convert fontSize from half-points to points (divide by 2)
       const fontSizeInPoints = fontSize / 2;
-      // Calculate actual line height in points
-      const lineHeightInPoints = fontSizeInPoints * lineHeight;
-      // Convert to TWIPs (20 TWIPs per point)
-      return lineHeightInPoints * 20;
+      // Calculate actual line height in TWIPs (20 TWIPs per point)
+      return Math.round(fontSizeInPoints * lineHeight * 20);
     } else {
       // If no fontSize is specified, use default font size (typically 11pt)
       const defaultFontSize = 11;
-      return defaultFontSize * lineHeight * 20;
+      return Math.round(defaultFontSize * lineHeight * 20);
     }
   } else if (typeof lineHeight === 'string') {
     // Handle existing px, pt, etc. conversions
@@ -969,17 +967,8 @@ const buildSpacing = (lineSpacing, beforeSpacing, afterSpacing) => {
   const spacingFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'spacing');
 
   if (lineSpacing || lineSpacing === 0) {
-    // Base line height
-    spacingFragment.att('@w', 'line', '240'); // Standard line height
+    spacingFragment.att('@w', 'line', lineSpacing);
     spacingFragment.att('@w', 'lineRule', 'auto');
-
-    // Calculate extra spacing
-    const extraSpace = lineSpacing - 240;
-    if (extraSpace > 0) {
-      const halfSpace = Math.floor(extraSpace / 2);
-      spacingFragment.att('@w', 'before', halfSpace);
-      spacingFragment.att('@w', 'after', halfSpace);
-    }
   }
 
   // Handle explicit before/after spacing if provided
@@ -1063,17 +1052,15 @@ const buildParagraphProperties = (attributes) => {
   if (attributes && attributes.constructor === Object) {
     // Always handle line height first
     const fontSize = attributes.fontSize || 22; // Default 11pt = 22 half-points
-    const lineHeight = attributes.lineHeight || fontSize * 1.5 * 20; // 1.5 is default line height
-
+    const lineHeight = (fontSize / 2) * 1.5 * 20; // 1.5 is default line height
     // Calculate spacing
-    const baseLineHeight = fontSize * 20; // Convert fontSize to TWIPs
+    const baseLineHeight = (fontSize / 2) * 20; // Convert fontSize to TWIPs
     const extraSpace = lineHeight - baseLineHeight;
     const halfSpace = Math.floor(extraSpace / 2);
-
     // Apply base spacing with even distribution
     const spacingFragment = fragment({ namespaceAlias: { w: namespaces.w } })
       .ele('@w', 'spacing')
-      .att('@w', 'line', baseLineHeight)
+      .att('@w', 'line', lineHeight)
       .att('@w', 'lineRule', 'atLeast');
 
     if (extraSpace > 0) {

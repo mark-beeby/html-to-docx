@@ -168,7 +168,7 @@ class DocxDocument {
     this.lastMediaId = 0;
     this.lastHeaderId = 0;
     this.lastFooterId = 0;
-    this.defaultLineHeight = properties.defaultLineHeight ? properties.defaultLineHeight : 1.1;
+    this.defaultLineHeight = properties.defaultLineHeight ? properties.defaultLineHeight : 1.5;
     this.stylesObjects = [];
     this.numberingObjects = [];
     this.fontTableObjects = [];
