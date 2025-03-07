@@ -1819,7 +1819,11 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
     const cellBorders = {};
     const style = column.properties?.style || {};
     ['top', 'right', 'bottom', 'left'].forEach((side) => {
-      const borderStyle = style[`border-${side}`] || style.border;
+      let borderStyle = style[`border-${side}`] || style.border;
+      if (!borderStyle && style['border-color']) {
+        borderStyle = `1px solid ${style['border-color']}`;
+        style.border = borderStyle;
+      }
       if (borderStyle) {
         const border = parseBorderStyle(borderStyle);
         if (border && border.width > 0) {
@@ -2202,6 +2206,10 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
         Object.keys(borders).forEach((side) => {
           borders[side].size = size;
         });
+      }
+
+      if (styles['border-color'] && !styles.border) {
+        styles.border = `1px solid ${styles['border-color']}`;
       }
 
       // Process border shorthand
