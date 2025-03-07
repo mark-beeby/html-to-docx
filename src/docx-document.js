@@ -690,7 +690,7 @@ class DocxDocument {
     }
 
     if (headerConfig) {
-      if (headerConfig.backgroundImage) {
+      if (headerConfig.backgroundImage && headerConfig.backgroundImage?.url) {
         const backgroundHeight = await this.addBackgroundImage(
           headerXML,
           headerConfig.backgroundImage,
@@ -754,7 +754,7 @@ class DocxDocument {
     }
 
     if (footerConfig) {
-      if (footerConfig.backgroundImage) {
+      if (footerConfig.backgroundImage && footerConfig.backgroundImage?.url) {
         const backgroundHeight = await this.addBackgroundImage(
           footerXML,
           footerConfig.backgroundImage,
