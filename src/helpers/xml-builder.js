@@ -1716,14 +1716,40 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
   // Add consistent row height
   const trPr = tableRowFragment.ele('@w', 'trPr');
 
+  let maxCellHeight = 0;
+  // eslint-disable-next-line no-unused-vars,no-restricted-syntax
+  for (const [columnIndex, column] of columns.entries()) {
+    const cellHeightOverride = column.properties?.style?.height;
+    let cellHeightTwips = 0;
+
+    // Convert pixel height to twips if present
+    if (cellHeightOverride) {
+      if (pixelRegex.test(cellHeightOverride)) {
+        cellHeightTwips = pixelToTWIP(cellHeightOverride.match(pixelRegex)[1]);
+      } else if (pointRegex.test(cellHeightOverride)) {
+        cellHeightTwips = pointToTWIP(cellHeightOverride.match(pointRegex)[1]);
+      }
+
+      if (cellHeightTwips) {
+        maxCellHeight = Math.max(maxCellHeight, cellHeightTwips);
+      }
+    }
+  }
+
   if (needsRowHeight) {
     trPr
       .ele('@w', 'trHeight')
-      .att('@w', 'val', '400') // Set a default height of 400 twips (about 0.28 inches)
+      .att('@w', 'val', maxCellHeight.toString() > 0 ? maxCellHeight.toString() : '400') // Set a default height of 400 twips (about 0.28 inches)
+      .att('@w', 'hRule', 'atLeast'); // atLeast ensures minimum height while allowing expansion if needed
+  } else if (maxCellHeight) {
+    trPr
+      .ele('@w', 'trHeight')
+      .att('@w', 'val', maxCellHeight.toString() > 0 ? maxCellHeight.toString() : '400')
       .att('@w', 'hRule', 'atLeast'); // atLeast ensures minimum height while allowing expansion if needed
   } else {
     trPr.ele('@w', 'trHeight').att('@w', 'hRule', 'atLeast'); // atLeast ensures minimum height while allowing expansion if needed
   }
+
   /**
    * Order of precedence on neighbouring cells:
    *
