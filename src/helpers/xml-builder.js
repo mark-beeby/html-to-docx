@@ -2432,7 +2432,7 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
             const tableRowFragment = await buildTableRow(docxDocumentInstance, columns, {
               ...modifiedAttributes,
               rowContext,
-              rowVNode: childVNode,
+              rowVNode: grandChildVNode,
             });
             tableFragment.import(tableRowFragment);
 
