@@ -1654,11 +1654,46 @@ const getBorderPriority = (border) => {
   return border.size * 8; // Convert to twips for comparison
 };
 
+const parseGradient = (backgroundValue) => {
+  // Basic linear gradient parser
+  const gradientRegex = /linear-gradient\((.*?)\)/;
+  const match = backgroundValue.match(gradientRegex);
+
+  if (!match) return null;
+
+  const gradientContent = match[1];
+  const parts = gradientContent.split(',').map((part) => part.trim());
+
+  // Handle direction
+  let direction = 'to right'; // default
+  if (parts[0].startsWith('to ')) {
+    // eslint-disable-next-line prefer-destructuring
+    direction = parts[0];
+    parts.shift();
+  } else if (parts[0].includes('deg')) {
+    // eslint-disable-next-line prefer-destructuring
+    direction = parts[0];
+    parts.shift();
+  }
+
+  // Get colors
+  const colors = parts.map((color) => {
+    // Remove any stop positions for now
+    const cleanColor = color.split(' ')[0];
+    return fixupColorCode(cleanColor);
+  });
+
+  return {
+    type: 'gradient',
+    direction,
+    colors,
+  };
+};
+
 const buildTableRow = async function buildTableRow(docxDocumentInstance, columns, attributes = {}) {
   const { rowContext, rowVNode } = attributes;
   const width = attributes.width || attributes.maximumWidth || '100%';
   const tableRowFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'tr');
-  const rowBgFallback = rowVNode.properties?.style?.['background-color'] || false;
   const needsRowHeight = columns.some((column) => {
     const style = column.properties?.style || {};
     const hasPadding = [
@@ -1742,9 +1777,27 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
     const align = column.properties?.style?.['text-align'];
     const vAlign = column.properties?.attributes?.valign;
     const cssVAlign = column.properties?.style?.['vertical-align'];
-    let cellBgOverride = column.properties?.style?.['background-color'] || rowBgFallback || false;
-    if (cellBgOverride) {
-      cellBgOverride = fixupColorCode(cellBgOverride);
+    // Replace the existing background color handling with this:
+    const cellBackground =
+      column.properties?.style?.background ||
+      column.properties?.style?.['background-color'] ||
+      rowVNode.properties?.style?.background ||
+      rowVNode.properties?.style?.['background-color'] ||
+      false;
+
+    let cellBgOverride = false;
+    if (cellBackground) {
+      // Check if it's a gradient
+      const gradientInfo = parseGradient(cellBackground);
+      if (gradientInfo) {
+        // For gradients, use the first color as the fill
+        // In the future, you might want to implement a more sophisticated approach
+        // eslint-disable-next-line prefer-destructuring
+        cellBgOverride = gradientInfo.colors[0];
+      } else {
+        // Handle solid colors as before
+        cellBgOverride = fixupColorCode(cellBackground);
+      }
     }
 
     // eslint-disable-next-line no-nested-ternary
@@ -1968,7 +2021,6 @@ const buildTableProperties = (attributes) => {
   // Handle border collapse and borders
   if (attributes.borderCollapse === 'collapse') {
     const tblBorders = tableProperties.ele('@w', 'tblBorders');
-
     // For collapsed borders, table borders take precedence
     if (attributes.defaultBorder || attributes.tableBorders) {
       // If we have a default border, apply it to all sides
@@ -2110,6 +2162,10 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
   const tableStyles = vNode.properties?.style || {};
   const tableAttributes = vNode.properties?.attributes || {};
 
+  // this would be equivalent of disabling the border even if enabled by attr
+  if (tableStyles?.['border-width'] === '0px') {
+    delete tableAttributes.border;
+  }
   // Handle basic border="1" attribute
   if (tableAttributes.border) {
     modifiedAttributes.defaultBorder = {
