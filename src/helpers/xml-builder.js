@@ -1939,7 +1939,7 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
     previousCellRightBorder = cellBorders.right;
 
     if (Object.keys(cellBorders).length > 0) {
-      const tcBorders = tableCellFragment.first().ele('w:tcBorders');
+      const tcBorders = tableCellFragment.first().ele('@w', 'tcBorders');
       // eslint-disable-next-line no-loop-func
       Object.entries(cellBorders).forEach(([side, border]) => {
         // Skip right border if it lost to next cell's left border
