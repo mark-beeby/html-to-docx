@@ -2039,7 +2039,7 @@ const buildTableProperties = (attributes) => {
   if (attributes.width || attributes.maximumWidth) {
     tableProperties
       .ele('@w', 'tblW')
-      .att('@w', 'w', Math.round(((attributes.width || attributes.maximumWidth) / 100) * 5000))
+      .att('@w', 'w', attributes.width || attributes.maximumWidth)
       .att('@w', 'type', 'dxa');
   }
 
@@ -2331,6 +2331,7 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
     }
 
     if (tableStyles.width) {
+      console.log('yes', tableStyles.width);
       if (pixelRegex.test(tableStyles.width)) {
         pixelRegex.lastIndex = 0;
         width = pixelToTWIP(tableStyles.width.match(pixelRegex)[1]);
@@ -2339,6 +2340,7 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
         const percentageValue = tableStyles.width.match(percentageRegex)[1];
         width = Math.round(Math.round((percentageValue / 100) * 12240));
       }
+      console.log('width', width);
     }
 
     if (width) {
@@ -2429,7 +2431,7 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
   }
 
   let currentRowIndex = 0;
-
+  console.log('modifiedAttributes.width', modifiedAttributes.width);
   let hasGrid = false;
   if (vNodeHasChildren(vNode)) {
     for (let index = 0; index < vNode.children.length; index++) {
