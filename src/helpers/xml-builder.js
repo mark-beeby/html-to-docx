@@ -1807,8 +1807,8 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
     const cellBackground =
       column.properties?.style?.background ||
       column.properties?.style?.['background-color'] ||
-      rowVNode.properties?.style?.background ||
-      rowVNode.properties?.style?.['background-color'] ||
+      rowVNode?.properties?.style?.background ||
+      rowVNode?.properties?.style?.['background-color'] ||
       false;
 
     let cellBgOverride = false;
