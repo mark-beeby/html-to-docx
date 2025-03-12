@@ -478,10 +478,10 @@ const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes,
     if (style['font-family']) {
       modifiedAttributes.font = docxDocumentInstance.createFont(style['font-family']);
     }
-    if (style['text-decoration'] && style['text-decoration'] === 'underline') {
+    if (style['text-decoration'] && style['text-decoration'].toLowerCase() === 'underline') {
       modifiedAttributes.u = true;
     }
-    if (style['font-style'] && style['font-style'] === 'italic') {
+    if (style['font-style'] && style['font-style'].toLowerCase() === 'italic') {
       modifiedAttributes.i = true;
     }
     if (style['font-size']) {
@@ -493,14 +493,17 @@ const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes,
     if (style['background-color'] && !colorlessColors.includes(style['background-color'])) {
       modifiedAttributes.backgroundColor = fixupColorCode(style['background-color']);
     }
-    if (style['vertical-align'] && verticalAlignValues.includes(style['vertical-align'])) {
-      modifiedAttributes.verticalAlign = style['vertical-align'];
+    if (
+      style['vertical-align'] &&
+      verticalAlignValues.includes(style['vertical-align'].toLowerCase())
+    ) {
+      modifiedAttributes.verticalAlign = style['vertical-align'].toLowerCase();
     }
     if (
       style['text-align'] &&
-      ['left', 'right', 'center', 'justify'].includes(style['text-align'])
+      ['left', 'right', 'center', 'justify'].includes(style['text-align'].toLowerCase())
     ) {
-      modifiedAttributes.textAlign = style['text-align'];
+      modifiedAttributes.textAlign = style['text-align'].toLowerCase();
     }
     if (style['font-weight']) {
       const weight = style['font-weight'];
