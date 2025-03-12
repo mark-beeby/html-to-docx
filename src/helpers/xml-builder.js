@@ -2196,16 +2196,16 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
   if (tableStyles?.['border-width'] === '0px') {
     delete tableAttributes.border;
   }
-  // Handle basic border="1" attribute
-  if (tableAttributes.border) {
-    modifiedAttributes.defaultBorder = {
-      size: parseInt(tableAttributes.border, 10),
-      color: '000000',
-      stroke: 'single',
-    };
-  }
 
   if (isVNode(vNode) && vNode.properties) {
+    // Handle basic border="1" attribute
+    if (tableAttributes.border) {
+      modifiedAttributes.defaultBorder = {
+        size: parseInt(tableAttributes.border, 10),
+        color: '000000',
+        stroke: 'single',
+      };
+    }
     // Border processing
     const processBorders = (styles, attrs) => {
       if (styles['border-style'] === 'hidden') {
@@ -2236,12 +2236,20 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
 
       if (styles['border-color'] && !styles.border) {
         styles.border = `1px solid ${styles['border-color']}`;
+        if (modifiedAttributes.defaultBorder) {
+          modifiedAttributes.defaultBorder.color =
+            styles['border-color'] || modifiedAttributes.defaultBorder.color;
+        }
       }
 
       // Process border shorthand
       if (styles.border) {
         const border = parseBorderStyle(styles.border);
         if (border) {
+          if (modifiedAttributes.defaultBorder) {
+            modifiedAttributes.defaultBorder.color =
+              border.color || modifiedAttributes.defaultBorder.color;
+          }
           Object.keys(borders).forEach((side) => {
             borders[side].size = border.width || borders[side].size;
             borders[side].color = border.color || borders[side].color;
