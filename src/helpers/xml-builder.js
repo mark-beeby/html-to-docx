@@ -850,7 +850,12 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
 
     const { type, inlineOrAnchored, ...otherAttributes } = attributes;
     // eslint-disable-next-line no-use-before-define
-    const imageFragment = buildDrawing(inlineOrAnchored, type, otherAttributes);
+    const imageFragment = buildDrawing(
+      inlineOrAnchored,
+      type,
+      otherAttributes,
+      docxDocumentInstance
+    );
     runFragment.import(imageFragment);
   } else if (isVNode(vNode) && vNode.tagName === 'br') {
     const lineBreakFragment = buildLineBreak('textWrapping');
@@ -2591,7 +2596,6 @@ const buildGraphicFrameTransform = (attributes) => {
 
 const buildShapeProperties = (attributes) => {
   const shapeProperties = fragment({ namespaceAlias: { pic: namespaces.pic } }).ele('@pic', 'spPr');
-
   const graphicFrameTransformFragment = buildGraphicFrameTransform(attributes);
   shapeProperties.import(graphicFrameTransformFragment);
   const presetGeometryFragment = buildPresetGeometry();
@@ -2771,12 +2775,51 @@ const buildEffectExtentFragment = () =>
     .att('t', '0')
     .up();
 
-const buildExtent = ({ width, height }) =>
-  fragment({ namespaceAlias: { wp: namespaces.wp } })
+const buildExtent = ({ width, height, originalWidth, originalHeight, maximumWidth }) => {
+  // Default to document width if available
+  const convertToEMU = (value) => {
+    if (value > 0 && value < 100000) {
+      return value * 635; // Convert TWIPs to EMUs
+    }
+    return value; // Already in EMUs
+  };
+
+  // Default document width (about 6 inches)
+  const docWidth = maximumWidth ? convertToEMU(maximumWidth) : 5486400;
+
+  let finalWidth;
+  let finalHeight;
+
+  if (width && height) {
+    // Use explicitly calculated dimensions if available
+    finalWidth = width;
+    finalHeight = height;
+  } else if (originalWidth && originalHeight) {
+    // Calculate based on original dimensions
+    const aspectRatio = originalWidth / originalHeight;
+    const originalWidthInEMU = pixelToEMU(originalWidth);
+
+    // Scale down if wider than document
+    if (originalWidthInEMU > docWidth) {
+      finalWidth = docWidth;
+      finalHeight = Math.round(docWidth / aspectRatio);
+    } else {
+      // Use original size for smaller images
+      finalWidth = originalWidthInEMU;
+      finalHeight = pixelToEMU(originalHeight);
+    }
+  } else {
+    // Last resort fallback - 1/2 document width
+    finalWidth = Math.round(docWidth / 2);
+    finalHeight = Math.round(finalWidth * 0.75); // 4:3 aspect ratio
+  }
+
+  return fragment({ namespaceAlias: { wp: namespaces.wp } })
     .ele('@wp', 'extent')
-    .att('cx', width)
-    .att('cy', height)
+    .att('cx', finalWidth)
+    .att('cy', finalHeight)
     .up();
+};
 
 const buildPositionV = () =>
   fragment({ namespaceAlias: { wp: namespaces.wp } })
@@ -2803,7 +2846,7 @@ const buildSimplePos = () =>
     .att('y', '0')
     .up();
 
-const buildAnchoredDrawing = (graphicType, attributes) => {
+const buildAnchoredDrawing = (graphicType, attributes, docxDocumentInstance) => {
   const anchoredDrawingFragment = fragment({ namespaceAlias: { wp: namespaces.wp } })
     .ele('@wp', 'anchor')
     .att('distB', '0')
@@ -2823,7 +2866,13 @@ const buildAnchoredDrawing = (graphicType, attributes) => {
   anchoredDrawingFragment.import(positionHFragment);
   const positionVFragment = buildPositionV();
   anchoredDrawingFragment.import(positionVFragment);
-  const extentFragment = buildExtent({ width: attributes.width, height: attributes.height });
+  const extentFragment = buildExtent({
+    width: attributes.width,
+    height: attributes.height,
+    originalWidth: attributes.originalWidth,
+    originalHeight: attributes.originalHeight,
+    maximumWidth: attributes.maximumWidth || docxDocumentInstance.availableDocumentSpace,
+  });
   anchoredDrawingFragment.import(extentFragment);
   const effectExtentFragment = buildEffectExtentFragment();
   anchoredDrawingFragment.import(effectExtentFragment);
@@ -2842,15 +2891,20 @@ const buildAnchoredDrawing = (graphicType, attributes) => {
   return anchoredDrawingFragment;
 };
 
-const buildInlineDrawing = (graphicType, attributes) => {
+const buildInlineDrawing = (graphicType, attributes, docxDocumentInstance) => {
   const inlineDrawingFragment = fragment({ namespaceAlias: { wp: namespaces.wp } })
     .ele('@wp', 'inline')
     .att('distB', '0')
     .att('distL', '0')
     .att('distR', '0')
     .att('distT', '0');
-
-  const extentFragment = buildExtent({ width: attributes.width, height: attributes.height });
+  const extentFragment = buildExtent({
+    width: attributes.width,
+    height: attributes.height,
+    originalWidth: attributes.originalWidth,
+    originalHeight: attributes.originalHeight,
+    maximumWidth: attributes.maximumWidth || docxDocumentInstance.availableDocumentSpace,
+  });
   inlineDrawingFragment.import(extentFragment);
   const effectExtentFragment = buildEffectExtentFragment();
   inlineDrawingFragment.import(effectExtentFragment);
@@ -2867,11 +2921,11 @@ const buildInlineDrawing = (graphicType, attributes) => {
   return inlineDrawingFragment;
 };
 
-const buildDrawing = (inlineOrAnchored = false, graphicType, attributes) => {
+const buildDrawing = (inlineOrAnchored = false, graphicType, attributes, docxDocumentInstance) => {
   const drawingFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'drawing');
   const inlineOrAnchoredDrawingFragment = inlineOrAnchored
-    ? buildInlineDrawing(graphicType, attributes)
-    : buildAnchoredDrawing(graphicType, attributes);
+    ? buildInlineDrawing(graphicType, attributes, docxDocumentInstance)
+    : buildAnchoredDrawing(graphicType, attributes, docxDocumentInstance);
   drawingFragment.import(inlineOrAnchoredDrawingFragment);
   drawingFragment.up();
 
