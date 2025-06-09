@@ -196,8 +196,9 @@ class DocxDocument {
     this.generateFooterXML = this.generateFooterXML.bind(this);
     this.generateSectionXML = generateSectionXML.bind(this);
     this.embedFonts = this.embedFonts.bind(this);
-
-    this.ListStyleBuilder = new ListStyleBuilder(properties.numbering);
+    this.ListStyleBuilder = new ListStyleBuilder({
+      defaultOrderedListStyleType: 'decimal',
+    });
   }
 
   calculateHeaderHeight() {
@@ -444,16 +445,22 @@ class DocxDocument {
                 )
               : 'bullet'
           )
-          .up()
-          .ele('@w', 'lvlText')
-          .att(
-            '@w',
-            'val',
-            type === 'ol'
-              ? this.ListStyleBuilder.getListPrefixSuffix(properties.style, level)
-              : '\uF0B7'
-          )
-          .up()
+          .up();
+
+        // Get the appropriate bullet character or list prefix/suffix
+        if (type === 'ol') {
+          // For ordered lists, use the existing logic
+          levelFragment
+            .ele('@w', 'lvlText')
+            .att('@w', 'val', this.ListStyleBuilder.getListPrefixSuffix(properties.style, level))
+            .up();
+        } else {
+          // For unordered lists, get the custom bullet character
+          const bulletChar = this.ListStyleBuilder.getBulletChar(properties, level);
+          levelFragment.ele('@w', 'lvlText').att('@w', 'val', bulletChar).up();
+        }
+
+        levelFragment
           .ele('@w', 'lvlJc')
           .att('@w', 'val', 'left')
           .up()
@@ -476,12 +483,26 @@ class DocxDocument {
 
         // Add font settings based on list type
         if (type === 'ul') {
+          // For unordered lists, determine the appropriate font for the bullet character
+          const bulletChar = this.ListStyleBuilder.getBulletChar(properties, level);
+          const documentDefaultFont = this.font || defaultFont || 'Arial';
+          const bulletFont = this.ListStyleBuilder.getBulletFont(
+            properties,
+            bulletChar,
+            documentDefaultFont
+          );
+
           rPrFragment
             .ele('@w', 'rFonts')
-            .att('@w', 'ascii', 'Symbol')
-            .att('@w', 'hAnsi', 'Symbol')
+            .att('@w', 'ascii', bulletFont)
+            .att('@w', 'hAnsi', bulletFont)
             .att('@w', 'hint', 'default')
             .up();
+
+          // The Symbol character needs special handling with the ascii char attribute
+          if (bulletFont === 'Symbol') {
+            rPrFragment.ele('@w', 'ascii').att('@w', 'char', '•').up();
+          }
         }
         // Add color if specified in properties (for both ul and ol)
         if (properties.style && properties.style.primaryColour) {
