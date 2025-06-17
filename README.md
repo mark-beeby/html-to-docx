@@ -164,6 +164,27 @@ Native columns within docx are not appropriate for HTML conversion, as they over
 right, not onto the next page. To achieve a html-like column division tables are used to control
 the layout within the resulting document.
 
+## Page sections
+
+When you want to print sections of content logically separately, with an optional header / footer
+control you can use data-section and data-show-header and data-show-footer on content to achieve this.
+
+```html
+<div data-section="true" data-show-header="false" data-show-footer="false">
+  <div>
+    <p>Content on its own page with header and footer suppressed</p>
+  </div>
+</div>
+<div data-section="true" data-show-header="true" data-show-footer="true">
+  <div>
+    <p>Content starting on a new page with header and footer intact</p>
+  </div>
+</div>
+```
+Native columns within docx are not appropriate for HTML conversion, as they overflow left to
+right, not onto the next page. To achieve a html-like column division tables are used to control
+the layout within the resulting document.
+
 ## Notes
 
 Currently page break can be implemented by having div with classname "page-break" or style "page-break-after" despite the values of the "page-break-after", and contents inside the div element will be ignored. `<div class="page-break" style="page-break-after: always;"></div>`

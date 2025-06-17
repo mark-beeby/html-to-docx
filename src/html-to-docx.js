@@ -106,6 +106,43 @@ const normalizeDocumentOptions = (documentOptions) => {
   return normalizedDocumentOptions;
 };
 
+function generateEmptyHeaderAndFooter(docxDocument, zip) {
+  // generate an empty header and footer xml in case these require suppression
+  // eslint-disable-next-line no-param-reassign
+  docxDocument.relationshipFilename = headerFileName;
+  const { headerId, headerXML } = docxDocument.generateEmptyHeaderXML();
+  // eslint-disable-next-line no-param-reassign
+  docxDocument.relationshipFilename = footerFileName;
+  const { footerId, footerXML } = docxDocument.generateEmptyFooterXML();
+  // eslint-disable-next-line no-param-reassign
+  docxDocument.relationshipFilename = documentFileName;
+  [
+    {
+      type: headerType,
+      id: headerId,
+      xml: headerXML,
+    },
+    {
+      type: footerType,
+      id: footerId,
+      xml: footerXML,
+    },
+  ].forEach(({ type, id, xml }) => {
+    const fileNameWithExt = `${type}${id}.xml`;
+    const relationshipId = docxDocument.createDocumentRelationships(
+      docxDocument.relationshipFilename,
+      type,
+      fileNameWithExt,
+      internalRelationship
+    );
+    zip
+      .folder(wordFolder)
+      .file(fileNameWithExt, xml.toString({ prettyPrint: true }), { createFolders: false });
+    // eslint-disable-next-line no-param-reassign
+    docxDocument[`${type}Objects`].none = { id, relationshipId, type };
+  });
+}
+
 // Ref: https://en.wikipedia.org/wiki/Office_Open_XML_file_formats
 // http://officeopenxml.com/anatomyofOOXML.php
 async function addFilesToContainer(
@@ -144,8 +181,6 @@ async function addFilesToContainer(
   // Embed fonts before generating document XML
   await docxDocument.embedFonts();
 
-  docxDocument.documentXML = await renderDocumentFile(docxDocument);
-
   zip
     .folder(relsFolderName)
     .file(
@@ -154,6 +189,8 @@ async function addFilesToContainer(
       { createFolders: false }
     );
   zip.folder('docProps').file('core.xml', docxDocument.generateCoreXML(), { createFolders: false });
+
+  generateEmptyHeaderAndFooter(docxDocument, zip);
 
   if (docxDocument.header && (headerHTMLString || headerConfig)) {
     const vTree = headerHTMLString ? convertHTML(headerHTMLString) : null;
@@ -180,7 +217,11 @@ async function addFilesToContainer(
     zip
       .folder(wordFolder)
       .file(fileNameWithExt, headerXML.toString({ prettyPrint: true }), { createFolders: false });
-    docxDocument.headerObjects.push({ headerId, relationshipId, type: docxDocument.headerType });
+    docxDocument.headerObjects.default = {
+      headerId,
+      relationshipId,
+      type: docxDocument.headerType,
+    };
   }
 
   // Handle footer in similar way
@@ -209,8 +250,14 @@ async function addFilesToContainer(
     zip
       .folder(wordFolder)
       .file(fileNameWithExt, footerXML.toString({ prettyPrint: true }), { createFolders: false });
-    docxDocument.footerObjects.push({ footerId, relationshipId, type: docxDocument.footerType });
+    docxDocument.footerObjects.default = {
+      footerId,
+      relationshipId,
+      type: docxDocument.footerType,
+    };
   }
+
+  docxDocument.documentXML = await renderDocumentFile(docxDocument);
 
   const themeFileNameWithExt = `${themeFileName}.xml`;
   docxDocument.createDocumentRelationships(

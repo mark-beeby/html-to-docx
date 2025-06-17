@@ -176,8 +176,16 @@ class DocxDocument {
     this.relationshipFilename = documentFileName;
     this.relationships = [{ fileName: documentFileName, lastRelsId: 5, rels: [] }];
     this.mediaFiles = [];
-    this.headerObjects = [];
-    this.footerObjects = [];
+    this.headerObjects = {};
+    // if you define multiple sections with the same header you get duplication, this tracks when one has been added
+    this.headerAdded = false;
+    this.footerObjects = {};
+    // if you define multiple sections with the same footer you get duplication, this tracks when one has been added
+    this.footerAdded = false;
+
+    // Support for multiple sections from data-section divs
+    this.sections = [];
+    this.currentSectionId = 0;
     this.documentXML = null;
 
     this.generateContentTypesXML = this.generateContentTypesXML.bind(this);
@@ -304,10 +312,30 @@ class DocxDocument {
         .up();
     }
 
+    // Check if we have custom sections from data-section divs
+    const hasCustomSections = this.sections && this.sections.length > 0;
+
     // Modify section properties for responsive header
     if (this.sectionProperties) {
       const body = documentXML.root().first();
 
+      if (hasCustomSections) {
+        console.log(
+          `Document has ${this.sections.length} custom sections - skipping document-level section properties`
+        );
+
+        // Remove any existing document-level sectPr to avoid duplicate section properties
+        body.each((child) => {
+          if (child.node.nodeName === 'w:sectPr') {
+            child.remove();
+          }
+        });
+
+        // Skip all remaining section property work
+        return documentXML.toString({ prettyPrint: true });
+      }
+
+      // Standard case for documents without custom sections
       // Find existing sectPr or create a new one
       let sectPr;
       // eslint-disable-next-line consistent-return
@@ -676,7 +704,103 @@ class DocxDocument {
     return lastRelsId;
   }
 
-  async generateHeaderXML(vTree, headerConfig) {
+  generateEmptyHeaderXML() {
+    const headerId = this.lastHeaderId + 1;
+    const headerTypeName = 'none';
+    this.lastHeaderId = headerId;
+    const XMLFragment = create({
+      encoding: 'UTF-8',
+      standalone: true,
+      namespaceAlias: {
+        w: namespaces.w,
+        r: namespaces.r,
+        wp: namespaces.wp,
+        a: namespaces.a,
+        pic: namespaces.pic,
+        ve: namespaces.ve,
+        o: namespaces.o,
+        v: namespaces.v,
+        w10: namespaces.w10,
+      },
+    }).ele('@w', 'hdr');
+
+    XMLFragment.import(
+      fragment({ namespaceAlias: { w: namespaces.w } })
+        .ele('@w', 'p')
+        .ele('@w', 'pPr')
+        .ele('@w', 'pStyle')
+        .att('@w', 'val', 'header')
+        .up()
+        .up()
+        .up()
+    );
+
+    // Store the header XML by type name to support multiple sections
+    if (!this.headerXMLs) {
+      this.headerXMLs = {};
+    }
+
+    // Store by type name
+    this.headerXMLs[headerTypeName] = generateXMLString(
+      XMLFragment.toString({ prettyPrint: true }),
+      `word/header${headerId}.xml`
+    );
+
+    // Store header object by type name for sectPr references
+    this.headerObjects[headerTypeName] = {
+      headerId: `rId${headerId}`,
+      height: 0,
+    };
+
+    // Return all the header information including type name
+    return {
+      headerId: `rId${headerId}`,
+      headerXML: XMLFragment,
+      headerHeight: 0,
+      typeName: headerTypeName,
+    };
+  }
+
+  generateEmptyFooterXML() {
+    const footerId = this.lastFooterId + 1;
+    const footerTypeName = 'none';
+    this.lastFooterId = footerId;
+    const XMLFragment = create({
+      encoding: 'UTF-8',
+      standalone: true,
+      namespaceAlias: {
+        w: namespaces.w,
+        r: namespaces.r,
+        wp: namespaces.wp,
+        a: namespaces.a,
+        pic: namespaces.pic,
+        ve: namespaces.ve,
+        o: namespaces.o,
+        v: namespaces.v,
+        w10: namespaces.w10,
+      },
+    }).ele('@w', 'ftr');
+
+    const emptyFragment = fragment({ namespaceAlias: { w: namespaces.w } })
+      .ele('@w', 'p')
+      .ele('@w', 'pPr')
+      .ele('@w', 'pStyle')
+      .att('@w', 'val', 'footer')
+      .up()
+      .up()
+      .up();
+    XMLFragment.import(emptyFragment);
+
+    // Return all the footer information including type name
+    return {
+      footerId: `rId${footerId}`,
+      footerXML: XMLFragment,
+      footerHeight: 0,
+      typeName: footerTypeName,
+    };
+  }
+
+  async generateHeaderXML(vTree, headerConfig, headerTypeName = 'default') {
     const headerId = this.lastHeaderId + 1;
     this.lastHeaderId = headerId;
     const pageWidthEMU = this.width * 635;
@@ -736,8 +860,25 @@ class DocxDocument {
       // Calculate the header height
       headerHeight = this.calculateHeaderHeight();
     }
-    // Return headerId, headerXML, and calculated headerHeight
-    return { headerId, headerXML, headerHeight };
+    // Store the header XML by type name to support multiple sections
+    if (!this.headerXMLs) {
+      this.headerXMLs = {};
+    }
+
+    // Store by type name
+    this.headerXMLs[headerTypeName] = generateXMLString(
+      headerXML.toString({ prettyPrint: true }),
+      `word/header${headerId}.xml`
+    );
+
+    // Store header object by type name for sectPr references
+    this.headerObjects[headerTypeName] = {
+      headerId: `rId${headerId}`,
+      height: headerHeight,
+    };
+
+    // Return all the header information including type name
+    return { headerId: `rId${headerId}`, headerXML, headerHeight, typeName: headerTypeName };
   }
 
   async generateFooterXML(vTree, footerConfig) {

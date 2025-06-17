@@ -338,11 +338,175 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     return; // Handled in parent function to convert columns
   }
 
+  // Handle both regular page breaks and data-section divs that require section breaks
   if (
     vNode.tagName === 'div' &&
     (vNode.properties.attributes.class === 'page-break' ||
-      (vNode.properties.style && vNode.properties.style['page-break-after']))
+      (vNode.properties.style && vNode.properties.style['page-break-after']) ||
+      (vNode.properties.attributes.class && vNode.properties.attributes['data-section']))
   ) {
+    const isProfilePage =
+      vNode.properties.attributes.class && vNode.properties.attributes['data-section'];
+
+    // Track section information in the DocxDocument instance
+    if (isProfilePage && vNode.properties.attributes['data-section-break'] === 'true') {
+      const sectionIndex = parseInt(
+        vNode.properties.attributes['data-section-index'] || docxDocumentInstance.currentSectionId,
+        10
+      );
+      const headerType = vNode.properties.attributes['data-header-type'] || 'default';
+      const footerType = vNode.properties.attributes['data-footer-type'] || 'default';
+
+      // Store section information
+      let margins = null;
+      if (vNode.properties.attributes['data-margins']) {
+        try {
+          margins = JSON.parse(vNode.properties.attributes['data-margins']);
+        } catch (e) {
+          console.error('Error parsing margins JSON:', e);
+        }
+      }
+
+      docxDocumentInstance.sections.push({
+        index: sectionIndex,
+        headerType,
+        footerType,
+        margins,
+      });
+      // eslint-disable-next-line no-param-reassign
+      docxDocumentInstance.currentSectionId = sectionIndex + 1;
+    }
+
+    // For data-section divs, we'll create a section break with its own properties
+    if (isProfilePage) {
+      // Create a section break with its own properties
+      const sectionBreakPara = fragment({ namespaceAlias: { w: namespaces.w, r: namespaces.r } })
+        .ele('w:p')
+        .ele('w:r')
+        .ele('w:br')
+        .att('w:type', 'page')
+        .up()
+        .up()
+        .up()
+        .ele('w:p')
+        .ele('w:pPr')
+        .ele('w:sectPr')
+        // Add section type to ensure it starts on a new page
+        .ele('w:type')
+        .att('w:val', 'nextPage')
+        .up();
+
+      // Add section properties based on custom attributes if present
+      // Check if this data-section has custom margins
+      const hasCustomMargins = vNode.properties.attributes['data-margins'];
+      let margins = null;
+
+      if (hasCustomMargins) {
+        try {
+          margins = JSON.parse(vNode.properties.attributes['data-margins']);
+          sectionBreakPara
+            .ele('w:pgMar')
+            .att('w:top', margins.top || docxDocumentInstance.margins.top)
+            .att('w:right', margins.right || docxDocumentInstance.margins.right)
+            .att('w:bottom', margins.bottom || docxDocumentInstance.margins.bottom)
+            .att('w:left', margins.left || docxDocumentInstance.margins.left)
+            .att('w:header', margins.header || docxDocumentInstance.margins.header)
+            .att('w:footer', margins.footer || docxDocumentInstance.margins.footer)
+            .up();
+        } catch (e) {
+          console.error('Error parsing margins JSON:', e);
+          // Use default page margins if parsing fails
+          sectionBreakPara
+            .ele('w:pgMar')
+            .att('w:top', docxDocumentInstance.margins.top)
+            .att('w:right', docxDocumentInstance.margins.right)
+            .att('w:bottom', docxDocumentInstance.margins.bottom)
+            .att('w:left', docxDocumentInstance.margins.left)
+            .att('w:header', docxDocumentInstance.margins.header)
+            .att('w:footer', docxDocumentInstance.margins.footer)
+            .up();
+        }
+      } else {
+        // Use default page margins if no custom margins are provided
+        sectionBreakPara
+          .ele('w:pgMar')
+          .att('w:top', docxDocumentInstance.margins.top)
+          .att('w:right', docxDocumentInstance.margins.right)
+          .att('w:bottom', docxDocumentInstance.margins.bottom)
+          .att('w:left', docxDocumentInstance.margins.left)
+          .att('w:header', docxDocumentInstance.margins.header)
+          .att('w:footer', docxDocumentInstance.margins.footer)
+          .up();
+      }
+
+      // Check for header/footer options
+      const headerType = vNode.properties.attributes['data-header-type'] || 'default';
+      const footerType = vNode.properties.attributes['data-footer-type'] || 'default';
+      // Add header reference if header exists
+      if (docxDocumentInstance.headerObjects && docxDocumentInstance.headerObjects[headerType]) {
+        if (headerType !== 'none') {
+          // eslint-disable-next-line no-param-reassign
+          docxDocumentInstance.headerAdded = true;
+        }
+        sectionBreakPara
+          .ele('w:headerReference')
+          .att('w:type', 'default')
+          .att('r:id', `rId${docxDocumentInstance.headerObjects[headerType].relationshipId}`)
+          .up();
+      } else if (!docxDocumentInstance.headerAdded) {
+        console.log(`Warning: Header type '${headerType}' not found in docxDocument.headerObjects`);
+      }
+
+      // Add footer reference if footer exists
+      if (docxDocumentInstance.footerObjects && docxDocumentInstance.footerObjects[footerType]) {
+        if (footerType !== 'none') {
+          // eslint-disable-next-line no-param-reassign
+          docxDocumentInstance.footerAdded = true;
+        }
+        sectionBreakPara
+          .ele('w:footerReference')
+          .att('w:type', 'default')
+          .att('r:id', `rId${docxDocumentInstance.footerObjects[footerType].relationshipId}`)
+          .up();
+      } else if (!docxDocumentInstance.footerAdded) {
+        console.log(`Warning: Footer type '${footerType}' not found in docxDocument.footerObjects`);
+      }
+
+      // Add page size for consistency
+      sectionBreakPara
+        .ele('w:pgSz')
+        .att('w:w', docxDocumentInstance.width)
+        .att('w:h', docxDocumentInstance.height)
+        .att('w:orient', docxDocumentInstance.orientation || 'portrait')
+        .up();
+
+      // Register this section with the DocxDocument for later reference
+      const sectionIndex = parseInt(
+        vNode.properties.attributes['data-section-index'] || docxDocumentInstance.currentSectionId,
+        10
+      );
+      docxDocumentInstance.sections.push({
+        index: sectionIndex,
+        headerType,
+        footerType,
+        margins,
+      });
+      // eslint-disable-next-line no-param-reassign
+      docxDocumentInstance.currentSectionId = sectionIndex + 1;
+
+      // Complete the section break fragment
+      sectionBreakPara.up().up();
+
+      // Now process the data-section div's children
+      // eslint-disable-next-line no-restricted-syntax
+      for (const child of vNode.children || []) {
+        await findXMLEquivalent(docxDocumentInstance, child, xmlFragment);
+      }
+
+      xmlFragment.import(sectionBreakPara.up().up());
+      return;
+    }
+    // Regular page break (not a section break)
     const paragraphFragment = fragment({ namespaceAlias: { w: namespaces.w } })
       .ele('w:p')
       .ele('w:r')
