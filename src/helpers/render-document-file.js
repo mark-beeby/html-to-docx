@@ -360,8 +360,9 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
       // Store section information
       let margins = null;
       if (vNode.properties.attributes['data-margins']) {
+        const marginStr = vNode.properties.attributes['data-margins'].replaceAll('&quot;', '"');
         try {
-          margins = JSON.parse(vNode.properties.attributes['data-margins']);
+          margins = JSON.parse(marginStr);
         } catch (e) {
           console.error('Error parsing margins JSON:', e);
         }
@@ -403,15 +404,16 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
 
       if (hasCustomMargins) {
         try {
-          margins = JSON.parse(vNode.properties.attributes['data-margins']);
+          const marginStr = vNode.properties.attributes['data-margins'].replaceAll('&quot;', '"');
+          margins = JSON.parse(marginStr);
           sectionBreakPara
             .ele('w:pgMar')
-            .att('w:top', margins.top || docxDocumentInstance.margins.top)
-            .att('w:right', margins.right || docxDocumentInstance.margins.right)
-            .att('w:bottom', margins.bottom || docxDocumentInstance.margins.bottom)
-            .att('w:left', margins.left || docxDocumentInstance.margins.left)
-            .att('w:header', margins.header || docxDocumentInstance.margins.header)
-            .att('w:footer', margins.footer || docxDocumentInstance.margins.footer)
+            .att('w:top', margins.top ?? docxDocumentInstance.margins.top)
+            .att('w:right', margins.right ?? docxDocumentInstance.margins.right)
+            .att('w:bottom', margins.bottom ?? docxDocumentInstance.margins.bottom)
+            .att('w:left', margins.left ?? docxDocumentInstance.margins.left)
+            .att('w:header', margins.header ?? docxDocumentInstance.margins.header)
+            .att('w:footer', margins.footer ?? docxDocumentInstance.margins.footer)
             .up();
         } catch (e) {
           console.error('Error parsing margins JSON:', e);
