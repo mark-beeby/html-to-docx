@@ -873,15 +873,15 @@ class DocxDocument {
 
     // Store header object by type name for sectPr references
     this.headerObjects[headerTypeName] = {
-      headerId: `rId${headerId}`,
+      headerId: `${headerId}`,
       height: headerHeight,
     };
 
     // Return all the header information including type name
-    return { headerId: `rId${headerId}`, headerXML, headerHeight, typeName: headerTypeName };
+    return { headerId: `${headerId}`, headerXML, headerHeight, typeName: headerTypeName };
   }
 
-  async generateFooterXML(vTree, footerConfig) {
+  async generateFooterXML(vTree, footerConfig, footerTypeName = 'default') {
     const footerId = this.lastFooterId + 1;
     this.lastFooterId = footerId;
     const pageWidthEMU = this.width * 635;
@@ -941,6 +941,12 @@ class DocxDocument {
       // Calculate the footer height
       footerHeight = this.calculateFooterHeight();
     }
+
+    // Store header object by type name for sectPr references
+    this.footerObjects[footerTypeName] = {
+      headerId: `rId${footerId}`,
+      height: footerHeight,
+    };
 
     // Return footerId, footerXML, and calculated footerHeight
     return { footerId, footerXML, footerHeight };
