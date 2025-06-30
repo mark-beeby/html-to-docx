@@ -1058,22 +1058,50 @@ const buildParagraphProperties = (attributes) => {
   );
 
   if (attributes && attributes.constructor === Object) {
-    // Always handle line height first
-    const fontSize = attributes.fontSize || 22; // Default 11pt = 22 half-points
-    const lineHeight = (fontSize / 2) * 1.5 * 20; // 1.5 is default line height
-    // Calculate spacing
-    const baseLineHeight = (fontSize / 2) * 20; // Convert fontSize to TWIPs
-    const extraSpace = lineHeight - baseLineHeight;
-    const halfSpace = Math.floor(extraSpace / 2);
-    // Apply base spacing with even distribution
-    const spacingFragment = fragment({ namespaceAlias: { w: namespaces.w } })
-      .ele('@w', 'spacing')
-      .att('@w', 'line', lineHeight)
-      .att('@w', 'lineRule', 'atLeast');
+    // Create spacing fragment
+    const spacingFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'spacing');
 
-    if (extraSpace > 0) {
-      spacingFragment.att('@w', 'before', halfSpace);
-      spacingFragment.att('@w', 'after', halfSpace);
+    // Check if we have spacing overrides from docxDocumentInstance
+    if (attributes.spacing) {
+      // Handle line spacing (already in twentieths of a point)
+      if (attributes.spacing.lineSpacing !== undefined) {
+        spacingFragment.att('@w', 'line', attributes.spacing.lineSpacing);
+        spacingFragment.att('@w', 'lineRule', 'atLeast');
+      }
+      // Handle paragraph spacing (already in twentieths of a point)
+      if (attributes.spacing.paragraphSpacing) {
+        if (attributes.spacing.paragraphSpacing.above !== undefined) {
+          spacingFragment.att('@w', 'before', attributes.spacing.paragraphSpacing.above);
+        }
+
+        if (attributes.spacing.paragraphSpacing.below !== undefined) {
+          spacingFragment.att('@w', 'after', attributes.spacing.paragraphSpacing.below);
+        }
+      }
+    } else {
+      // Default behavior (existing code)
+      const fontSize = attributes.fontSize || 22; // Default 11pt = 22 half-points
+      const lineHeight = (fontSize / 2) * 1.5 * 20; // 1.5 is default line height
+      const baseLineHeight = (fontSize / 2) * 20; // Convert fontSize to TWIPs
+      const extraSpace = lineHeight - baseLineHeight;
+      const halfSpace = Math.floor(extraSpace / 2);
+
+      spacingFragment.att('@w', 'line', lineHeight);
+      spacingFragment.att('@w', 'lineRule', 'atLeast');
+
+      if (extraSpace > 0) {
+        spacingFragment.att('@w', 'before', halfSpace);
+        spacingFragment.att('@w', 'after', halfSpace);
+      }
+    }
+
+    // Handle explicit margin overrides (these take precedence)
+    if (attributes.marginTop !== undefined) {
+      spacingFragment.att('@w', 'before', attributes.marginTop);
+    }
+
+    if (attributes.marginBottom !== undefined) {
+      spacingFragment.att('@w', 'after', attributes.marginBottom);
     }
 
     spacingFragment.up();
@@ -1115,13 +1143,8 @@ const buildParagraphProperties = (attributes) => {
           paragraphPropertiesFragment.import(indentationFragment);
           delete attributes.indentation;
           break;
-        // Handle explicit margin overrides
-        case 'marginTop':
-          spacingFragment.att('@w', 'before', attributes[key]);
-          break;
-        case 'marginBottom':
-          spacingFragment.att('@w', 'after', attributes[key]);
-          break;
+        // Remove the marginTop/marginBottom handling from here as we've moved it above
+        // to ensure it's applied to the spacing fragment before it's added
       }
     });
   }
@@ -1212,10 +1235,18 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
     return null;
   }
 
+  // Initialize attributes object if undefined
+  attributes = attributes || {};
+
   // For empty paragraphs, ensure no spacing is added
   const isEmpty = !vNode || (isVText(vNode) && !vNode.text.trim());
   if (isEmpty && !attributes.isSpacerParagraph) {
     attributes = { ...attributes, beforeSpacing: 0, afterSpacing: 0, lineSpacing: 0 };
+  }
+  // Apply default spacing from docxDocumentInstance if available
+  else if (docxDocumentInstance?.defaultSpacing) {
+    // Simply pass the already-converted values from docxDocumentInstance
+    attributes.spacing = docxDocumentInstance.defaultSpacing;
   }
 
   const paragraphFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'p');

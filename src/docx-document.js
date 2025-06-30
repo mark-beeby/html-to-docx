@@ -122,6 +122,19 @@ class DocxDocument {
     this.htmlString = properties.htmlString;
     this.orientation = properties.orientation;
     this.pageSize = properties.pageSize || defaultDocumentOptions.pageSize;
+    const spacing = {
+      above: properties.spacing.defaultParagraphSpacing?.above ?? 0.17,
+      below: properties.spacing.defaultParagraphSpacing?.below ?? 0.17,
+      line: properties.spacing.defaultLineSpacing ?? 12,
+    };
+    const spacingVals = this.convertToDocxSpacing(spacing.above, spacing.below, spacing.line);
+    this.defaultSpacing = {
+      paragraphSpacing: {
+        above: spacingVals.above,
+        below: spacingVals.below,
+      },
+      lineSpacing: spacingVals.line,
+    };
 
     const isPortraitOrientation = this.orientation === defaultOrientation;
     const height = this.pageSize.height ? this.pageSize.height : landscapeHeight;
@@ -227,6 +240,35 @@ class DocxDocument {
     headerHeight += 240;
 
     return headerHeight;
+  }
+
+  /**
+   * Converts spacing measurements to DOCX XML values
+   * @param aboveLines
+   * @param belowLines
+   * @param {number} lineSpacingPt - Line spacing in points
+   * @param baseLineHeightPt
+   * @returns {Object} DOCX spacing values
+   */
+  // eslint-disable-next-line class-methods-use-this
+  convertToDocxSpacing(aboveLines, belowLines, lineSpacingPt = null, baseLineHeightPt = 15.6) {
+    // Convert paragraph spacing from line units to points
+    const abovePt = aboveLines * baseLineHeightPt;
+    const belowPt = belowLines * baseLineHeightPt;
+
+    // Convert to twentieths of a point
+    const above = Math.round(abovePt * 20);
+    const below = Math.round(belowPt * 20);
+
+    // Calculate line spacing in twentieths (if provided)
+    const line = typeof lineSpacingPt !== 'undefined' ? Math.round(lineSpacingPt * 20) : null;
+
+    // Return object with the correct values
+    return {
+      above,
+      below,
+      line,
+    };
   }
 
   calculateFooterHeight() {
@@ -421,7 +463,13 @@ class DocxDocument {
 
   generateStylesXML() {
     return generateXMLString(
-      generateStylesXML(this.font, this.fontSize, this.complexScriptFontSize, this.lang)
+      generateStylesXML(
+        this.font,
+        this.fontSize,
+        this.complexScriptFontSize,
+        this.lang,
+        this.defaultSpacing
+      )
     );
   }
 

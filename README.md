@@ -120,6 +120,11 @@ Full fledged examples can be found under `example/`
     - `defaultOrderedListStyleType` <?[String]> default ordered list style type. Defaults to `decimal`.
   - `decodeUnicode` <?[Boolean]> flag to enable unicode decoding of header, body and footer. Defaults to `false`.
   - `lang` <?[String]> language localization code for spell checker to work properly. Defaults to `en-US`.
+  - `spacing` <?[Object]> configuration for document-wide paragraph and line spacing.
+    - `defaultLineSpacing` <?[Number]> default line spacing in points (pt). Defaults to normal line spacing based on font size.
+    - `defaultParagraphSpacing` <?[Object]> configuration for space before and after paragraphs.
+      - `before` <?[Number]> space before paragraphs in line units (e.g., 0.17 = 0.17 lines). Defaults to 0.17.
+      - `after` <?[Number]> space after paragraphs in line units (e.g., 0.17 = 0.17 lines). Defaults to 0.17.
 - `footerHTMLString` <[String]> clean html string equivalent of footer. Defaults to `<p></p>` if footer flag is `true`.
 - `headerConfig` <?[Object]> configuration for header images and logos. 
   - `backgroundImage` <?[Object]> configuration for the header background image.
