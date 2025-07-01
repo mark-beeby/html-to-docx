@@ -201,7 +201,7 @@ async function addFilesToContainer(
     );
 
     if (headerHeight !== null) {
-      docxDocument.margins.header = 300;
+      docxDocument.margins.header = 150;
       docxDocument.margins.top = Math.max(headerHeight + 180, docxDocument.margins.top);
     }
 
@@ -221,6 +221,7 @@ async function addFilesToContainer(
       headerId,
       relationshipId,
       type: docxDocument.headerType,
+      height: docxDocument.headerObjects.default.height,
     };
   }
 
@@ -234,7 +235,7 @@ async function addFilesToContainer(
     );
 
     if (footerHeight !== null) {
-      docxDocument.margins.footer = 300;
+      docxDocument.margins.footer = 150;
       docxDocument.margins.bottom = Math.max(footerHeight + 180, docxDocument.margins.bottom);
     }
 
