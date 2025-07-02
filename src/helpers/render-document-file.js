@@ -430,36 +430,42 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
           margins = JSON.parse(marginStr);
           sectionBreakPara
             .ele('w:pgMar')
-            .att('w:top', (margins.top ?? docxDocumentInstance.margins.top) + headerHeight)
-            .att('w:right', margins.right ?? docxDocumentInstance.margins.right)
-            .att('w:bottom', (margins.bottom ?? docxDocumentInstance.margins.bottom) + footerHeight)
-            .att('w:left', margins.left ?? docxDocumentInstance.margins.left)
-            .att('w:header', docxDocumentInstance.margins.header)
-            .att('w:footer', docxDocumentInstance.margins.footer)
+            .att(
+              'w:top',
+              Math.round((margins.top ?? docxDocumentInstance.margins.top) + headerHeight)
+            )
+            .att('w:right', Math.round(margins.right ?? docxDocumentInstance.margins.right))
+            .att(
+              'w:bottom',
+              Math.round((margins.bottom ?? docxDocumentInstance.margins.bottom) + footerHeight)
+            )
+            .att('w:left', Math.round(margins.left ?? docxDocumentInstance.margins.left))
+            .att('w:header', Math.round(docxDocumentInstance.margins.header))
+            .att('w:footer', Math.round(docxDocumentInstance.margins.footer))
             .up();
         } catch (e) {
           console.error('Error parsing margins JSON:', e);
           // Use default page margins if parsing fails
           sectionBreakPara
             .ele('w:pgMar')
-            .att('w:top', docxDocumentInstance.margins.top + headerHeight)
-            .att('w:right', docxDocumentInstance.margins.right)
-            .att('w:bottom', docxDocumentInstance.margins.bottom + footerHeight)
-            .att('w:left', docxDocumentInstance.margins.left)
-            .att('w:header', docxDocumentInstance.margins.header)
-            .att('w:footer', docxDocumentInstance.margins.footer)
+            .att('w:top', Math.round(docxDocumentInstance.margins.top + headerHeight))
+            .att('w:right', Math.round(docxDocumentInstance.margins.right))
+            .att('w:bottom', Math.round(docxDocumentInstance.margins.bottom + footerHeight))
+            .att('w:left', Math.round(docxDocumentInstance.margins.left))
+            .att('w:header', Math.round(docxDocumentInstance.margins.header))
+            .att('w:footer', Math.round(docxDocumentInstance.margins.footer))
             .up();
         }
       } else {
         // Use default page margins if no custom margins are provided
         sectionBreakPara
           .ele('w:pgMar')
-          .att('w:top', docxDocumentInstance.margins.top + headerHeight)
-          .att('w:right', docxDocumentInstance.margins.right)
-          .att('w:bottom', docxDocumentInstance.margins.bottom + footerHeight)
-          .att('w:left', docxDocumentInstance.margins.left)
-          .att('w:header', docxDocumentInstance.margins.header)
-          .att('w:footer', docxDocumentInstance.margins.footer)
+          .att('w:top', Math.round(docxDocumentInstance.margins.top + headerHeight))
+          .att('w:right', Math.round(docxDocumentInstance.margins.right))
+          .att('w:bottom', Math.round(docxDocumentInstance.margins.bottom + footerHeight))
+          .att('w:left', Math.round(docxDocumentInstance.margins.left))
+          .att('w:header', Math.round(docxDocumentInstance.margins.header))
+          .att('w:footer', Math.round(docxDocumentInstance.margins.footer))
           .up();
       }
       // Add header reference if header exists
@@ -737,8 +743,8 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     case 'br':
       // Create a line break within the current paragraph instead of a new paragraph
       const linebreakFragment = fragment({ namespaceAlias: { w: namespaces.w } })
-        .ele('w:r')
-        .ele('w:br')
+        .ele('@w', 'r')
+        .ele('@w', 'br')
         .up()
         .up();
       xmlFragment.import(linebreakFragment);
