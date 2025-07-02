@@ -406,8 +406,9 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
       const headerType = vNode.properties.attributes['data-header-type'] || 'default';
       const footerType = vNode.properties.attributes['data-footer-type'] || 'default';
       const showHeader = headerType !== 'none';
+      const showFooter = footerType !== 'none';
       let headerHeight = showHeader ? docxDocumentInstance.margins.header : 0;
-      // Add header reference if header exists
+      let footerHeight = showFooter ? docxDocumentInstance.margins.footer : 0;
       if (
         docxDocumentInstance.headerObjects &&
         docxDocumentInstance.headerObjects[headerType] &&
@@ -415,6 +416,14 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
       ) {
         headerHeight = docxDocumentInstance.headerObjects[headerType].height ?? headerHeight;
       }
+      if (
+        docxDocumentInstance.footerObjects &&
+        docxDocumentInstance.footerObjects[footerType] &&
+        showFooter
+      ) {
+        footerHeight = docxDocumentInstance.footerObjects[footerType].height ?? footerHeight;
+      }
+
       if (hasCustomMargins) {
         try {
           const marginStr = vNode.properties.attributes['data-margins'].replaceAll('&quot;', '"');
@@ -423,10 +432,10 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
             .ele('w:pgMar')
             .att('w:top', (margins.top ?? docxDocumentInstance.margins.top) + headerHeight)
             .att('w:right', margins.right ?? docxDocumentInstance.margins.right)
-            .att('w:bottom', margins.bottom ?? docxDocumentInstance.margins.bottom)
+            .att('w:bottom', (margins.bottom ?? docxDocumentInstance.margins.bottom) + footerHeight)
             .att('w:left', margins.left ?? docxDocumentInstance.margins.left)
             .att('w:header', docxDocumentInstance.margins.header)
-            .att('w:footer', margins.footer ?? docxDocumentInstance.margins.footer)
+            .att('w:footer', docxDocumentInstance.margins.footer)
             .up();
         } catch (e) {
           console.error('Error parsing margins JSON:', e);
@@ -435,7 +444,7 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
             .ele('w:pgMar')
             .att('w:top', docxDocumentInstance.margins.top + headerHeight)
             .att('w:right', docxDocumentInstance.margins.right)
-            .att('w:bottom', docxDocumentInstance.margins.bottom)
+            .att('w:bottom', docxDocumentInstance.margins.bottom + footerHeight)
             .att('w:left', docxDocumentInstance.margins.left)
             .att('w:header', docxDocumentInstance.margins.header)
             .att('w:footer', docxDocumentInstance.margins.footer)
@@ -447,12 +456,13 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
           .ele('w:pgMar')
           .att('w:top', docxDocumentInstance.margins.top + headerHeight)
           .att('w:right', docxDocumentInstance.margins.right)
-          .att('w:bottom', docxDocumentInstance.margins.bottom)
+          .att('w:bottom', docxDocumentInstance.margins.bottom + footerHeight)
           .att('w:left', docxDocumentInstance.margins.left)
           .att('w:header', docxDocumentInstance.margins.header)
           .att('w:footer', docxDocumentInstance.margins.footer)
           .up();
       }
+      // Add header reference if header exists
       if (docxDocumentInstance.headerObjects && docxDocumentInstance.headerObjects[headerType]) {
         if (headerType !== 'none') {
           // eslint-disable-next-line no-param-reassign

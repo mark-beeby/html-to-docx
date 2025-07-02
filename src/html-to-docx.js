@@ -255,6 +255,7 @@ async function addFilesToContainer(
       footerId,
       relationshipId,
       type: docxDocument.footerType,
+      height: docxDocument.footerObjects.default.height,
     };
   }
 
