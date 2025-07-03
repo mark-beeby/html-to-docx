@@ -1000,89 +1000,52 @@ class DocxDocument {
     return { footerId, footerXML, footerHeight };
   }
 
-  // Helper method to estimate vTree height
   // eslint-disable-next-line class-methods-use-this
   estimateVTreeHeight(xmlFragment) {
     const xmlString = xmlFragment.toString();
 
-    // Regex with explicit namespace handling
-    const paragraphRegex =
-      /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">/g;
-    const nonEmptyParagraphRegex =
-      /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">.*?<w:t\b[^>]*>.*?<\/w:t>/g;
-    const multiLineParagraphRegex =
-      /<p\s+xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main">.*?<w:br\/>/g;
-    const tableRowRegex = /<w:tr>/g;
-    const imageRegex = /<wp:drawing>/g;
-    const textContentRegex = /<w:t\b[^>]*>([^<]+)<\/w:t>/g;
+    // Key structure detection patterns
+    const tableRegex =
+      /(?:<w:tbl\b[^>]*>|<tbl\b[^>]*xmlns="http:\/\/schemas\.openxmlformats\.org\/wordprocessingml\/2006\/main"[^>]*>)/g;
+    const tableRowRegex = /(?:<w:tr\b[^>]*>|<tr\b[^>]*>)/g;
+    const drawingRegex = /(?:<w:drawing\b[^>]*>|<drawing\b[^>]*>)/g;
+    const textRegex = /(?:<w:t\b[^>]*>|<t\b[^>]*>)([^<]*)(?:<\/w:t>|<\/t>)/g;
 
-    // Count elements
-    const paragraphs = (xmlString.match(paragraphRegex) || []).length;
-    const nonEmptyParagraphs = (xmlString.match(nonEmptyParagraphRegex) || []).length;
-    const multiLineParagraphs = (xmlString.match(multiLineParagraphRegex) || []).length;
-    // const tables = (xmlString.match(tableRegex) || []).length;
+    // Count key elements
+    const hasTables = xmlString.match(tableRegex) !== null;
     const tableRows = (xmlString.match(tableRowRegex) || []).length;
-    const images = (xmlString.match(imageRegex) || []).length;
+    const images = (xmlString.match(drawingRegex) || []).length;
 
-    // More accurate text content length
-    const textContentMatches = [...xmlString.matchAll(textContentRegex)];
-    const textContentLength = textContentMatches.reduce(
-      (total, match) => total + (match[1] ? match[1].trim().length : 0),
-      0
-    );
+    // Basic text content check
+    const textMatches = [...xmlString.matchAll(textRegex)];
+    const hasSubstantialText =
+      textMatches.reduce((total, match) => total + (match[1] ? match[1].length : 0), 0) > 50;
 
-    // Base heights (in EMUs)
-    const BASE_PARAGRAPH_HEIGHT = 240000; // 0.167 inches
-    const EMPTY_PARAGRAPH_HEIGHT = 120000; // 0.083 inches
-    const MULTILINE_PARAGRAPH_MULTIPLIER = 1.5;
-    const BASE_TABLE_ROW_HEIGHT = 240000; // 0.167 inches
-    const BASE_IMAGE_HEIGHT = 720000; // 0.5 inches
+    // Base height - minimal for simple text footers
+    let baseHeight = 360000; // 0.25 inches
 
-    // Calculate estimated heights with more precision
-    const paragraphHeight =
-      nonEmptyParagraphs * BASE_PARAGRAPH_HEIGHT +
-      (paragraphs - nonEmptyParagraphs) * EMPTY_PARAGRAPH_HEIGHT +
-      multiLineParagraphs * BASE_PARAGRAPH_HEIGHT * MULTILINE_PARAGRAPH_MULTIPLIER;
+    // Add for structure complexity
+    if (hasTables) {
+      // Base table structure
+      baseHeight = 432000; // 0.3 inches for table footers
 
-    const tableHeight = tableRows * BASE_TABLE_ROW_HEIGHT;
-    const imageHeight = images * BASE_IMAGE_HEIGHT;
+      // Add small increment per row (capped)
+      if (tableRows > 1) {
+        baseHeight += Math.min(tableRows - 1, 3) * 72000; // 0.05" per additional row, max 3
+      }
+    }
 
-    // Text content complexity factor
-    const textContentFactor = Math.max(1, Math.log(textContentLength + 1) * 0.7);
+    // Add for images (conservatively)
+    if (images > 0) {
+      baseHeight += Math.min(images, 3) * 36000; // 0.025" per image, max 3 images
+    }
 
-    // Combine estimations with intelligent weighting
-    const totalEstimatedHeight =
-      (paragraphHeight +
-        tableHeight +
-        imageHeight * 1.5 + // Give slightly more weight to images
-        textContentLength * 5000) * // Fine-tuned text content contribution
-      textContentFactor;
+    // Add for substantial text
+    if (hasSubstantialText && !hasTables) {
+      baseHeight += 72000; // 0.05" extra for text-heavy footers
+    }
 
-    // Logging for debugging
-    // console.log('Height Estimation Breakdown:', {
-    //   paragraphs,
-    //   nonEmptyParagraphs,
-    //   multiLineParagraphs,
-    //   tables,
-    //   tableRows,
-    //   images,
-    //   textContentLength,
-    //   paragraphHeight,
-    //   tableHeight,
-    //   imageHeight,
-    //   textContentFactor,
-    //   totalEstimatedHeight
-    // });
-
-    // Ensure a minimum and maximum reasonable height
-    const MIN_HEIGHT = 240000; // 0.167 inches
-    const MAX_HEIGHT = 7200000; // 5 inches
-
-    const finalHeight = Math.min(Math.max(totalEstimatedHeight, MIN_HEIGHT), MAX_HEIGHT);
-
-    // console.log('Final Calculated Height:', finalHeight);
-
-    return finalHeight;
+    return baseHeight;
   }
 
   // eslint-disable-next-line consistent-return
