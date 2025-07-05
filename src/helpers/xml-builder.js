@@ -2076,10 +2076,12 @@ const buildTableProperties = (attributes) => {
 
   // Handle table width
   if (attributes.width || attributes.maximumWidth) {
-    tableProperties
-      .ele('@w', 'tblW')
-      .att('@w', 'w', attributes.width || attributes.maximumWidth)
-      .att('@w', 'type', 'dxa');
+    if (attributes.width) {
+      tableProperties
+        .ele('@w', 'tblW')
+        .att('@w', 'w', attributes.width)
+        .att('@w', 'type', attributes.widthType || 'dxa');
+    }
   }
 
   // Handle justification
@@ -2342,15 +2344,20 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
     }
 
     let minimumWidth;
+    let minimumWidthType = 'dxa';
     let maximumWidth;
+    let maximumWidthType = 'dxa';
     let width;
+    let widthType = 'dxa';
+
     tableStyles['min-width'] = tableStyles['min-width'] || tableStyles.width;
     if (tableStyles['min-width']) {
       if (pixelRegex.test(tableStyles['min-width'])) {
         minimumWidth = pixelToTWIP(tableStyles['min-width'].match(pixelRegex)[1]);
       } else if (percentageRegex.test(tableStyles['min-width'])) {
         const percentageValue = tableStyles['min-width'].match(percentageRegex)[1];
-        minimumWidth = Math.round((percentageValue / 100) * attributes.maximumWidth);
+        minimumWidth = Math.round(percentageValue * 50); // Convert to Word's 50ths of a percent
+        minimumWidthType = 'pct';
       }
     }
 
@@ -2373,7 +2380,8 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
       } else if (percentageRegex.test(tableStyles['max-width'])) {
         percentageRegex.lastIndex = 0;
         const percentageValue = tableStyles['max-width'].match(percentageRegex)[1];
-        maximumWidth = Math.round((percentageValue / 100) * attributes.maximumWidth);
+        maximumWidth = Math.round(percentageValue * 50); // Convert to Word's 50ths of a percent
+        maximumWidthType = 'pct';
       }
     }
 
@@ -2384,25 +2392,39 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
       } else if (percentageRegex.test(tableStyles.width)) {
         percentageRegex.lastIndex = 0;
         const percentageValue = tableStyles.width.match(percentageRegex)[1];
-        width = Math.round(Math.round((percentageValue / 100) * 12240));
+        // For percentage widths, use pct type (50ths of a percent) instead of converting to twips
+        width = Math.round(percentageValue * 50); // 5000 = 100%
+        widthType = 'pct';
       }
     }
 
     if (width) {
       modifiedAttributes.width = width;
-      if (maximumWidth) {
+      modifiedAttributes.widthType = widthType;
+
+      // Only apply min/max constraints if the types match
+      if (maximumWidth && maximumWidthType === widthType) {
         modifiedAttributes.width = Math.min(modifiedAttributes.width, maximumWidth);
       }
-      if (minimumWidth) {
+      if (minimumWidth && minimumWidthType === widthType) {
         modifiedAttributes.width = Math.max(modifiedAttributes.width, minimumWidth);
       }
     } else if (minimumWidth) {
       modifiedAttributes.width = minimumWidth;
+      modifiedAttributes.widthType = minimumWidthType;
     }
-    if (modifiedAttributes.width) {
+
+    // Only apply maximumWidth constraint if we're using twips (dxa)
+    // For percentage widths, we want to keep them as percentages
+    if (
+      modifiedAttributes.width &&
+      modifiedAttributes.widthType === 'dxa' &&
+      attributes.maximumWidth
+    ) {
       modifiedAttributes.width = Math.min(modifiedAttributes.width, attributes.maximumWidth);
     }
   }
+
   let columnCount = 0;
   if (vNodeHasChildren(vNode)) {
     const firstRow = vNode.children.find(
@@ -2425,7 +2447,9 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
 
   const paddingPerCell = 0;
   const totalPadding = columnCount * paddingPerCell;
-  if (modifiedAttributes.width) {
+
+  // Only adjust for padding if we're using twips (dxa)
+  if (modifiedAttributes.width && modifiedAttributes.widthType === 'dxa') {
     modifiedAttributes.width = Math.max(modifiedAttributes.width - totalPadding, 0);
   }
 
