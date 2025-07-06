@@ -2366,11 +2366,27 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
       'margin-left': tblMarginLeft,
       'margin-right': tblMarginRight,
     } = tableStyles;
+    // Check for center alignment
     if (
       (tblMargin && tblMargin === 'auto') ||
       (tblMarginLeft && tblMarginLeft === 'auto' && tblMarginRight && tblMarginRight === 'auto')
     ) {
       modifiedAttributes.jc = 'center';
+    }
+    // Check for right alignment (margin-left: auto and margin-right: 0 etc)
+    else if (
+      tblMarginLeft &&
+      tblMarginLeft === 'auto' &&
+      (tblMarginRight === '0px' || tblMarginRight === '0' || !tblMarginRight)
+    ) {
+      modifiedAttributes.jc = 'right';
+    }
+    // also add left alignment
+    else if (
+      (!tblMarginLeft || tblMarginLeft === '0px' || tblMarginLeft === '0') &&
+      (!tblMarginRight || tblMarginRight === 'auto')
+    ) {
+      modifiedAttributes.jc = 'left';
     }
 
     if (tableStyles['max-width']) {
@@ -2492,9 +2508,17 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
   if (vNodeHasChildren(vNode)) {
     vNode.children.forEach((child) => {
       if (child.tagName === 'tr') {
-        totalRows++;
+        // Only count rows with at least one cell
+        const hasCells = child.children.some((c) => c.tagName === 'td' || c.tagName === 'th');
+        if (hasCells) totalRows++;
       } else if (child.tagName === 'thead' || child.tagName === 'tbody') {
-        totalRows += child.children.filter((grandChild) => grandChild.tagName === 'tr').length;
+        child.children
+          .filter((grandChild) => grandChild.tagName === 'tr')
+          .forEach((row) => {
+            // Only count rows with at least one cell
+            const hasCells = row.children.some((c) => c.tagName === 'td' || c.tagName === 'th');
+            if (hasCells) totalRows++;
+          });
       }
     });
   }
@@ -2515,6 +2539,12 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
             const columns = grandChildVNode.children.filter(
               (child) => child.tagName === 'td' || child.tagName === 'th'
             );
+
+            // Skip empty rows
+            if (columns.length === 0) {
+              // eslint-disable-next-line no-continue
+              continue;
+            }
 
             if (iteratorIndex === 0 && !hasGrid) {
               const tableGridFragment = buildTableGridFromTableRow(
@@ -2551,6 +2581,12 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
               (child) => child.tagName === 'td' || child.tagName === 'th'
             );
 
+            // Skip empty rows
+            if (columns.length === 0) {
+              // eslint-disable-next-line no-continue
+              continue;
+            }
+
             if (iteratorIndex === 0 && !hasGrid) {
               const tableGridFragment = buildTableGridFromTableRow(
                 grandChildVNode,
@@ -2580,6 +2616,12 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
         const columns = childVNode.children.filter(
           (child) => child.tagName === 'td' || child.tagName === 'th'
         );
+
+        // Skip empty rows
+        if (columns.length === 0) {
+          // eslint-disable-next-line no-continue
+          continue;
+        }
 
         // Add row context
         const rowContext = {
