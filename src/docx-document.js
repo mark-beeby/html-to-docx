@@ -42,6 +42,7 @@ import {
 import ListStyleBuilder from './utils/list';
 import { fontFamilyToTableObject } from './utils/font-family-conversion';
 import { pixelRegex, pixelToHIP, pointRegex, pointToHIP } from './utils/unit-conversion';
+import * as xmlBuilder from './helpers/xml-builder';
 
 function generateContentTypesFragments(contentTypesXML, type, objects) {
   if (objects && Array.isArray(objects)) {
@@ -877,7 +878,19 @@ class DocxDocument {
     if (vTree) {
       const XMLFragment = fragment();
       await convertVTreeToXML(this, vTree, XMLFragment);
-      headerXML.import(XMLFragment);
+
+      const firstParagraph = XMLFragment.first();
+      if (
+        firstParagraph.node?.nodeName !== 'p' &&
+        ((headerConfig.logos && Array.isArray(headerConfig?.logos)) ||
+          (headerConfig.backgroundImage && headerConfig.backgroundImage?.url))
+      ) {
+        const paragraphFragment = await xmlBuilder.buildParagraph(vTree, {}, this);
+        headerXML.import(paragraphFragment);
+        headerXML.import(XMLFragment);
+      } else {
+        headerXML.import(XMLFragment);
+      }
 
       this.vTreeHeight = Math.ceil(this.estimateVTreeHeight(XMLFragment) / 635); // Convert EMUs to TWIPs
     }
@@ -958,7 +971,19 @@ class DocxDocument {
     if (vTree) {
       const XMLFragment = fragment();
       await convertVTreeToXML(this, vTree, XMLFragment);
-      footerXML.import(XMLFragment);
+
+      const firstParagraph = XMLFragment.first();
+      if (
+        firstParagraph.node?.nodeName !== 'p' &&
+        ((footerConfig.logos && Array.isArray(footerConfig?.logos)) ||
+          (footerConfig.backgroundImage && footerConfig.backgroundImage?.url))
+      ) {
+        const paragraphFragment = await xmlBuilder.buildParagraph(vTree, {}, this);
+        footerXML.import(paragraphFragment);
+        footerXML.import(XMLFragment);
+      } else {
+        footerXML.import(XMLFragment);
+      }
 
       this.vTreeHeight = Math.ceil(this.estimateVTreeHeight(XMLFragment) / 635); // Convert EMUs to TWIPs
     }
@@ -1307,7 +1332,7 @@ class DocxDocument {
         .ele('@wp', 'positionV')
         .att('relativeFrom', 'paragraph') // Try 'paragraph' instead of 'page'
         .ele('@wp', 'posOffset')
-        .txt('0')
+        .txt('180000')
         .up()
         .up()
         .ele('@wp', 'extent')
