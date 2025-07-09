@@ -38,8 +38,7 @@ class ListStyleBuilder {
    * Get bullet character for unordered list
    * @param {Object} style - The style properties of the list
    * @param {Number} lvl - The level of the list
-  }
-
+   */
   // eslint-disable-next-line class-methods-use-this
   getListStyleType(listType) {
     switch (listType) {
