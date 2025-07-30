@@ -1,6 +1,6 @@
 {
   "name": "@mark-beeby/html-to-docx",
-  "version": "1.5.11",
+  "version": "1.5.12",
   "description": "HTML to DOCX converter (Fork with custom modifications to support table column widths)",
   "keywords": [
     "html",
@@ -72,7 +72,7 @@
   "dependencies": {
     "@oozcitak/dom": "1.15.6",
     "@oozcitak/util": "8.3.4",
-    "canvas": "^2.11.2",
+    "canvas": "^3.0.0",
     "cheerio": "^1.0.0",
     "color-name": "^1.1.4",
     "html-entities": "^2.3.3",
@@ -81,6 +81,7 @@
     "image-to-base64": "^2.2.0",
     "inline-css": "^4.0.2",
     "inliner": "^1.13.1",
+    "jsdom": "^26.1.0",
     "jszip": "^3.7.1",
     "lodash": "^4.17.21",
     "mime-types": "^2.1.35",

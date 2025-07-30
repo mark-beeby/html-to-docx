@@ -469,6 +469,106 @@ const fixupMargin = (marginString) => {
   }
 };
 
+const parseBorderStyle = (borderStyle) => {
+  if (!borderStyle) return {};
+
+  // Match width, style, and color in any order
+  // First extract any rgb/rgba values to prevent splitting them
+  const rgbMatches = borderStyle.match(/rgba?\([^)]+\)|hsla?\([^)]+\)/g) || [];
+  let remainingStyle = borderStyle;
+  const rgbPlaceholders = {};
+
+  // Replace rgb/rgba/hsl/hsla values with placeholders
+  rgbMatches.forEach((match, index) => {
+    // Ensure the match is properly formatted
+    if (
+      !match.match(/^(rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)|hsla?\([^)]+\))$/)
+    ) {
+      // eslint-disable-next-line no-console
+      console.warn(`Invalid color format found in border style: ${match}`);
+      return;
+    }
+    const placeholder = `__COLOR_${index}__`;
+    rgbPlaceholders[placeholder] = match;
+    remainingStyle = remainingStyle.replace(match, placeholder);
+  });
+
+  const parts = remainingStyle.split(/\s+/);
+  const result = {};
+
+  parts.forEach((part) => {
+    // Restore rgb values from placeholders
+    const actualPart = rgbPlaceholders[part] || part;
+
+    // Handle width measurements - convert to Word's border size units (eighths of a point)
+    if (actualPart.match(/^[0-9]+(\.[0-9]+)?(px|pt|em|rem)?$/)) {
+      // Extract the numeric part and unit
+      const widthMatch = actualPart.match(/^([0-9]+(\.[0-9]+)?)(?:(px|pt|em|rem))?$/);
+      if (widthMatch) {
+        const width = parseFloat(widthMatch[1]);
+        const unit = widthMatch[3] || 'px'; // Default to px if no unit is specified
+
+        // Convert to Word's border size units (eighths of a point)
+        // Word border size: 2=1/4pt, 4=1/2pt, 6=3/4pt, 8=1pt, 16=2pt, 24=3pt, etc.
+        switch (unit.toLowerCase()) {
+          case 'pt': // Already in points, just convert to eighths
+            result.size = Math.max(1, Math.round(width * 8));
+            break;
+          case 'px': // Convert pixels to points (1px ≈ 0.75pt), then to eighths
+            result.size = Math.max(1, Math.round(width * 0.75 * 8));
+            break;
+          case 'em': // Convert em to points (1em ≈ 12pt), then to eighths
+            result.size = Math.max(1, Math.round(width * 12 * 8));
+            break;
+          case 'rem': // Similar to em
+            result.size = Math.max(1, Math.round(width * 12 * 8));
+            break;
+          default:
+            result.size = Math.max(1, Math.round(width * 0.75 * 8)); // Default to px conversion
+        }
+      }
+    } else if (
+      actualPart.match(/^(none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset)$/)
+    ) {
+      // Convert CSS border styles to OOXML border types
+      switch (actualPart) {
+        case 'solid':
+          result.style = 'single';
+          break;
+        case 'none':
+        case 'hidden':
+          result.style = 'none';
+          break;
+        case 'dotted':
+          result.style = 'dotted';
+          break;
+        case 'dashed':
+          result.style = 'dashed';
+          break;
+        case 'double':
+          result.style = 'double';
+          break;
+        // For other styles, default to 'single'
+        default:
+          result.style = 'single';
+      }
+    } else if (
+      actualPart.match(/^(rgb|rgba|#|hsl|hsla)/i) ||
+      Object.prototype.hasOwnProperty.call(colorNames, actualPart.toLowerCase())
+    ) {
+      try {
+        result.color = fixupColorCode(actualPart);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.warn(`Error parsing color value: ${actualPart}`, error);
+        result.color = '000000'; // Fallback to black
+      }
+    }
+  });
+
+  return result;
+};
+
 const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes, options) => {
   const modifiedAttributes = { ...attributes };
 
@@ -577,13 +677,74 @@ const modifiedStyleAttributesBuilder = (docxDocumentInstance, vNode, attributes,
   }
 
   // paragraph only
-  if (options && options.isParagraph) {
-    if (isVNode(vNode) && vNode.tagName === 'blockquote') {
+  if (
+    options &&
+    options.isParagraph &&
+    isVNode(vNode) &&
+    vNode.properties &&
+    vNode.properties.style
+  ) {
+    const { style } = vNode.properties;
+    const borders = {};
+    let hasBorders = false;
+
+    // Extract border properties for all sides
+    const sides = ['top', 'right', 'bottom', 'left'];
+    sides.forEach((side) => {
+      // Check for specific side border property
+      const borderSideProperty = style[`border-${side}`];
+
+      // Parse the border style if it exists
+      if (borderSideProperty) {
+        const parsedBorder = parseBorderStyle(borderSideProperty);
+        if (Object.keys(parsedBorder).length > 0) {
+          borders[side] = {
+            size: parsedBorder.size || 2, // Default to 2 if not specified
+            spacing: parsedBorder.spacing || 1, // Default to 1 if not specified
+            color: parsedBorder.color || '000000', // Default to black if not specified
+            style: parsedBorder.style || 'single', // Default to single if not specified
+          };
+          hasBorders = true;
+        }
+      }
+      // If no specific side border, check for general border property
+      else if (style.border) {
+        const parsedBorder = parseBorderStyle(style.border);
+        if (Object.keys(parsedBorder).length > 0) {
+          borders[side] = {
+            size: parsedBorder.size || 2,
+            spacing: parsedBorder.spacing || 1,
+            color: parsedBorder.color || '000000',
+            style: parsedBorder.style || 'single',
+          };
+          hasBorders = true;
+        }
+      }
+    });
+
+    // Add borders to attributes if any were found
+    if (hasBorders) {
+      modifiedAttributes.borders = borders;
+    }
+
+    // Apply special styling for specific tags
+    if (vNode.tagName === 'blockquote') {
       modifiedAttributes.indentation = { left: 284 };
       modifiedAttributes.textAlign = 'justify';
-    } else if (isVNode(vNode) && vNode.tagName === 'code') {
+
+      // Add a left border for blockquotes if not already specified
+      if (!borders.left) {
+        if (!modifiedAttributes.borders) modifiedAttributes.borders = {};
+        modifiedAttributes.borders.left = {
+          size: 4,
+          spacing: 1,
+          color: '000000',
+          style: 'single',
+        };
+      }
+    } else if (vNode.tagName === 'code') {
       modifiedAttributes.highlightColor = 'lightGray';
-    } else if (isVNode(vNode) && vNode.tagName === 'pre') {
+    } else if (vNode.tagName === 'pre') {
       modifiedAttributes.font = 'Courier';
     }
   }
@@ -1030,18 +1191,19 @@ const buildHorizontalAlignment = (horizontalAlignment) => {
     .up();
 };
 
-const buildParagraphBorder = () => {
+const buildParagraphBorder = (borderAttributes = null) => {
   const paragraphBorderFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele(
     '@w',
     'pBdr'
   );
-  const bordersObject = cloneDeep(paragraphBordersObject);
+  const bordersObject = borderAttributes || cloneDeep(paragraphBordersObject);
 
   Object.keys(bordersObject).forEach((borderName) => {
     if (bordersObject[borderName]) {
-      const { size, spacing, color } = bordersObject[borderName];
+      const { size, spacing, color, style } = bordersObject[borderName];
+      const borderStroke = style || 'single';
 
-      const borderFragment = buildBorder(borderName, size, spacing, color);
+      const borderFragment = buildBorder(borderName, size, spacing, color, borderStroke);
       paragraphBorderFragment.import(borderFragment);
     }
   });
@@ -1128,10 +1290,14 @@ const buildParagraphProperties = (attributes) => {
           if (attributes.display === 'block') {
             const shadingFragment = buildShading(attributes[key]);
             paragraphPropertiesFragment.import(shadingFragment);
-            const paragraphBorderFragment = buildParagraphBorder();
-            paragraphPropertiesFragment.import(paragraphBorderFragment);
             delete attributes.backgroundColor;
           }
+          break;
+        case 'borders':
+          // Use custom border properties if provided
+          const paragraphBorderFragment = buildParagraphBorder(attributes[key]);
+          paragraphPropertiesFragment.import(paragraphBorderFragment);
+          delete attributes.borders;
           break;
         case 'paragraphStyle':
           const pStyleFragment = buildPStyle(attributes.paragraphStyle);
@@ -1611,81 +1777,6 @@ const parseCSSSpacing = (style, property) => {
   }
 
   return null;
-};
-
-const parseBorderStyle = (borderStyle) => {
-  if (!borderStyle) return {};
-
-  // Match width, style, and color in any order
-  // First extract any rgb/rgba values to prevent splitting them
-  const rgbMatches = borderStyle.match(/rgba?\([^)]+\)|hsla?\([^)]+\)/g) || [];
-  let remainingStyle = borderStyle;
-  const rgbPlaceholders = {};
-
-  // Replace rgb/rgba/hsl/hsla values with placeholders
-  rgbMatches.forEach((match, index) => {
-    // Ensure the match is properly formatted
-    if (
-      !match.match(/^(rgba?\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*(?:,\s*[\d.]+\s*)?\)|hsla?\([^)]+\))$/)
-    ) {
-      // eslint-disable-next-line no-console
-      console.warn(`Invalid color format found in border style: ${match}`);
-      return;
-    }
-    const placeholder = `__COLOR_${index}__`;
-    rgbPlaceholders[placeholder] = match;
-    remainingStyle = remainingStyle.replace(match, placeholder);
-  });
-
-  const parts = remainingStyle.split(/\s+/);
-  const result = {};
-
-  parts.forEach((part) => {
-    // Restore rgb values from placeholders
-    const actualPart = rgbPlaceholders[part] || part;
-
-    if (actualPart.match(/^[0-9]+(\.[0-9]+)?(px|pt|em|rem)$/)) {
-      result.width = parseInt(actualPart);
-    } else if (
-      actualPart.match(/^(none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset)$/)
-    ) {
-      // Convert CSS border styles to OOXML border types
-      switch (actualPart) {
-        case 'solid':
-          result.style = 'single';
-          break;
-        case 'none':
-        case 'hidden':
-          result.style = 'none';
-          break;
-        case 'dotted':
-          result.style = 'dotted';
-          break;
-        case 'dashed':
-          result.style = 'dashed';
-          break;
-        case 'double':
-          result.style = 'double';
-          break;
-        // For other styles, default to 'single'
-        default:
-          result.style = 'single';
-      }
-    } else if (
-      actualPart.match(/^(rgb|rgba|#|hsl|hsla)/i) ||
-      Object.prototype.hasOwnProperty.call(colorNames, actualPart.toLowerCase())
-    ) {
-      try {
-        result.color = fixupColorCode(actualPart);
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn(`Error parsing color value: ${actualPart}`, error);
-        result.color = '000000'; // Fallback to black
-      }
-    }
-  });
-
-  return result;
 };
 
 const getBorderPriority = (border) => {
