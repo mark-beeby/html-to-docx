@@ -914,7 +914,6 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
             'pre',
           ].includes(tempVNode.tagName)
         ) {
-          tempAttributes = {};
           switch (tempVNode.tagName) {
             case 'strong':
             case 'b':
@@ -933,6 +932,11 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
             case 'sup':
               tempAttributes.sup = true;
               break;
+          }
+          if (tempVNode.properties && tempVNode.properties.style) {
+            if (tempVNode.properties.style.color) {
+              tempAttributes.color = tempVNode.properties.style.color;
+            }
           }
           const formattingFragment = buildFormatting(tempVNode);
 
