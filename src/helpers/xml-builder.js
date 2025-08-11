@@ -1419,6 +1419,123 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
     attributes.spacing = docxDocumentInstance.defaultSpacing;
   }
 
+  // Check if we need to handle display:block inline elements
+  if (isVNode(vNode) && vNode.tagName === 'p' && vNodeHasChildren(vNode)) {
+    // Look for inline elements with display:block inside this paragraph
+    const blockDisplayChildren = vNode.children.filter(
+      (child) =>
+        isVNode(child) &&
+        child.properties?.style?.display === 'block' &&
+        [
+          'span',
+          'strong',
+          'b',
+          'em',
+          'i',
+          'u',
+          'ins',
+          'strike',
+          'del',
+          's',
+          'sub',
+          'sup',
+          'mark',
+          'a',
+        ].includes(child.tagName)
+    );
+
+    // If we found any display:block children, we need to split this paragraph
+    if (blockDisplayChildren.length > 0) {
+      // Create a container for all fragments
+      const allFragments = fragment();
+
+      // Process the children and split at display:block boundaries
+      let currentGroup = [];
+      let i = 0;
+
+      while (i < vNode.children.length) {
+        const child = vNode.children[i];
+
+        if (
+          isVNode(child) &&
+          child.properties?.style?.display === 'block' &&
+          [
+            'span',
+            'strong',
+            'b',
+            'em',
+            'i',
+            'u',
+            'ins',
+            'strike',
+            'del',
+            's',
+            'sub',
+            'sup',
+            'mark',
+            'a',
+          ].includes(child.tagName)
+        ) {
+          // If we have accumulated children before this block element, create a paragraph for them
+          if (currentGroup.length > 0) {
+            const beforeParagraph = await buildParagraph(
+              { ...vNode, children: currentGroup },
+              { ...attributes },
+              docxDocumentInstance
+            );
+            if (beforeParagraph) {
+              allFragments.import(beforeParagraph);
+            }
+            currentGroup = [];
+          }
+
+          // Create a paragraph for the display:block element with its text-align
+          const blockElementAttributes = { ...attributes };
+          if (
+            child.properties?.style?.['text-align'] &&
+            ['left', 'right', 'center', 'justify'].includes(
+              child.properties.style['text-align'].toLowerCase()
+            )
+          ) {
+            blockElementAttributes.textAlign = child.properties.style['text-align'].toLowerCase();
+          }
+
+          const blockElementParagraph = await buildParagraph(
+            child,
+            blockElementAttributes,
+            docxDocumentInstance
+          );
+
+          if (blockElementParagraph) {
+            allFragments.import(blockElementParagraph);
+          }
+
+          // Move to the next child
+          i++;
+        } else {
+          // Add this child to the current group
+          currentGroup.push(child);
+          i++;
+        }
+      }
+
+      // If we have any remaining children, create a paragraph for them
+      if (currentGroup.length > 0) {
+        const afterParagraph = await buildParagraph(
+          { ...vNode, children: currentGroup },
+          { ...attributes },
+          docxDocumentInstance
+        );
+        if (afterParagraph) {
+          allFragments.import(afterParagraph);
+        }
+      }
+
+      // Return all fragments
+      return allFragments;
+    }
+  }
+
   const paragraphFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'p');
 
   const modifiedAttributes = modifiedStyleAttributesBuilder(

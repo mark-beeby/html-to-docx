@@ -660,6 +660,43 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     case 'blockquote':
     case 'code':
     case 'pre':
+      // Check if this inline element has display: block style
+      const hasDisplayBlock = vNode.properties?.style?.display === 'block';
+      // If it has display: block, handle it as a block element
+      // and pass its text-align property to the paragraph builder if present
+      if (hasDisplayBlock) {
+        const paragraphOptions = {};
+
+        // Preserve text-align for the paragraph if it exists
+        if (
+          vNode.properties?.style?.['text-align'] &&
+          ['left', 'right', 'center', 'justify'].includes(
+            vNode.properties.style['text-align'].toLowerCase()
+          )
+        ) {
+          paragraphOptions.textAlign = vNode.properties.style['text-align'].toLowerCase();
+        }
+
+        const nParagraphFragment = await xmlBuilder.buildParagraph(
+          vNode,
+          paragraphOptions,
+          docxDocumentInstance
+        );
+        xmlFragment.import(nParagraphFragment);
+
+        // Add empty paragraph after block elements with mb-6 class
+        if (vNode.properties?.attributes?.class?.includes('mb-6')) {
+          const spacerParagraph = await xmlBuilder.buildParagraph(
+            null,
+            { isSpacerParagraph: true },
+            docxDocumentInstance
+          );
+          xmlFragment.import(spacerParagraph);
+        }
+        return;
+      }
+
+      // Regular handling for inline elements (unchanged)
       // Create paragraph if:
       // 1. Node has direct text content, OR
       // 2. Node is empty (no children) and is a block element, OR
