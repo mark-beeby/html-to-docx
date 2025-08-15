@@ -578,10 +578,52 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
   const spacingAfter = vNode.properties?.attributes?.['data-spacing-after'];
   switch (vNode.tagName) {
     case 'div':
-      // First process div's children
-      // eslint-disable-next-line no-restricted-syntax
-      for (const child of vNode.children || []) {
-        await findXMLEquivalent(docxDocumentInstance, child, xmlFragment);
+      // Check if div has direct text content and other content that needs to be preserved in order
+      if (hasDirectTextContent(vNode)) {
+        // Create a new virtual node representing just the div with its text content
+        // but maintain the original order of all children
+        // Process each child in order, handling text nodes specially
+        // eslint-disable-next-line no-restricted-syntax
+        for (const child of vNode.children || []) {
+          if (isVText(child) && child.text.trim()) {
+            // For text nodes, create a paragraph to hold them
+            const paragraphOptions = {};
+
+            // Preserve text-align from the parent div if it exists
+            if (
+              vNode.properties?.style?.['text-align'] &&
+              ['left', 'right', 'center', 'justify'].includes(
+                vNode.properties.style['text-align'].toLowerCase()
+              )
+            ) {
+              paragraphOptions.textAlign = vNode.properties.style['text-align'].toLowerCase();
+            }
+
+            // Create a new virtual node that looks like a paragraph but with the div's properties
+            // and just this text node as content
+            const textParagraphVNode = new VNode('p', vNode.properties, [child]);
+
+            // Build paragraph for just this text node
+            const textParagraphFragment = await xmlBuilder.buildParagraph(
+              textParagraphVNode,
+              paragraphOptions,
+              docxDocumentInstance
+            );
+
+            if (textParagraphFragment) {
+              xmlFragment.import(textParagraphFragment);
+            }
+          } else if (isVNode(child)) {
+            // Process non-text children normally
+            await findXMLEquivalent(docxDocumentInstance, child, xmlFragment);
+          }
+        }
+      } else {
+        // No direct text, just process div's children normally
+        // eslint-disable-next-line no-restricted-syntax
+        for (const child of vNode.children || []) {
+          await findXMLEquivalent(docxDocumentInstance, child, xmlFragment);
+        }
       }
 
       // Check for data-spacing-after attribute
