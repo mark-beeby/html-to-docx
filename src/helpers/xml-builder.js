@@ -1336,14 +1336,42 @@ const computeImageDimensions = (vNode, attributes) => {
   let modifiedHeight;
   let modifiedWidth;
 
+  // Check for width/height attributes first (these take precedence)
+  const widthAttr = vNode.properties?.attributes?.width || vNode.properties?.width;
+  const heightAttr = vNode.properties?.attributes?.height || vNode.properties?.height;
+
+  if (widthAttr) {
+    // Handle width attribute (assumed to be in pixels if no unit specified)
+    const widthStr = widthAttr.toString();
+    if (pixelRegex.test(widthStr)) {
+      modifiedWidth = pixelToEMU(widthStr.match(pixelRegex)[1]);
+      // eslint-disable-next-line no-restricted-globals
+    } else if (!isNaN(parseInt(widthStr, 10))) {
+      // If it's just a number, treat it as pixels
+      modifiedWidth = pixelToEMU(parseInt(widthStr, 10));
+    }
+  }
+
+  if (heightAttr) {
+    // Handle height attribute (assumed to be in pixels if no unit specified)
+    const heightStr = heightAttr.toString();
+    if (pixelRegex.test(heightStr)) {
+      modifiedHeight = pixelToEMU(heightStr.match(pixelRegex)[1]);
+      // eslint-disable-next-line no-restricted-globals
+    } else if (!isNaN(parseInt(heightStr, 10))) {
+      // If it's just a number, treat it as pixels
+      modifiedHeight = pixelToEMU(parseInt(heightStr, 10));
+    }
+  }
+
+  // Only check style properties if attributes didn't set dimensions
   if (vNode.properties && vNode.properties.style) {
-    if (vNode.properties.style.width) {
+    if (!modifiedWidth && vNode.properties.style.width) {
       if (vNode.properties.style.width !== 'auto') {
         if (pixelRegex.test(vNode.properties.style.width)) {
           modifiedWidth = pixelToEMU(vNode.properties.style.width.match(pixelRegex)[1]);
         } else if (percentageRegex.test(vNode.properties.style.width)) {
           const percentageValue = vNode.properties.style.width.match(percentageRegex)[1];
-
           modifiedWidth = Math.round((percentageValue / 100) * originalWidthInEMU);
         }
       } else {
@@ -1354,13 +1382,12 @@ const computeImageDimensions = (vNode, attributes) => {
         }
       }
     }
-    if (vNode.properties.style.height) {
+    if (!modifiedHeight && vNode.properties.style.height) {
       if (vNode.properties.style.height !== 'auto') {
         if (pixelRegex.test(vNode.properties.style.height)) {
           modifiedHeight = pixelToEMU(vNode.properties.style.height.match(pixelRegex)[1]);
         } else if (percentageRegex.test(vNode.properties.style.height)) {
-          const percentageValue = vNode.properties.style.width.match(percentageRegex)[1];
-
+          const percentageValue = vNode.properties.style.height.match(percentageRegex)[1];
           modifiedHeight = Math.round((percentageValue / 100) * originalHeightInEMU);
           if (!modifiedWidth) {
             modifiedWidth = Math.round(modifiedHeight * aspectRatio);
@@ -1378,12 +1405,17 @@ const computeImageDimensions = (vNode, attributes) => {
         }
       }
     }
-    if (modifiedWidth && !modifiedHeight) {
-      modifiedHeight = Math.round(modifiedWidth / aspectRatio);
-    } else if (modifiedHeight && !modifiedWidth) {
-      modifiedWidth = Math.round(modifiedHeight * aspectRatio);
-    }
-  } else {
+  }
+
+  // Calculate missing dimension based on aspect ratio
+  if (modifiedWidth && !modifiedHeight) {
+    modifiedHeight = Math.round(modifiedWidth / aspectRatio);
+  } else if (modifiedHeight && !modifiedWidth) {
+    modifiedWidth = Math.round(modifiedHeight * aspectRatio);
+  }
+
+  // Use original dimensions if nothing was specified
+  if (!modifiedWidth && !modifiedHeight) {
     modifiedWidth = originalWidthInEMU;
     modifiedHeight = originalHeightInEMU;
   }
@@ -1393,7 +1425,6 @@ const computeImageDimensions = (vNode, attributes) => {
   // eslint-disable-next-line no-param-reassign
   attributes.height = modifiedHeight;
 };
-
 const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
   // Skip empty text nodes without attributes
   if (isVText(vNode) && !vNode.text.trim() && !attributes) {
@@ -1419,45 +1450,13 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
     attributes.spacing = docxDocumentInstance.defaultSpacing;
   }
 
-  // Check if we need to handle display:block inline elements
+  // Check if we need to handle display:block inline elements OR centered images
   if (isVNode(vNode) && vNode.tagName === 'p' && vNodeHasChildren(vNode)) {
-    // Look for inline elements with display:block inside this paragraph
-    const blockDisplayChildren = vNode.children.filter(
-      (child) =>
-        isVNode(child) &&
-        child.properties?.style?.display === 'block' &&
-        [
-          'span',
-          'strong',
-          'b',
-          'em',
-          'i',
-          'u',
-          'ins',
-          'strike',
-          'del',
-          's',
-          'sub',
-          'sup',
-          'mark',
-          'a',
-        ].includes(child.tagName)
-    );
-
-    // If we found any display:block children, we need to split this paragraph
-    if (blockDisplayChildren.length > 0) {
-      // Create a container for all fragments
-      const allFragments = fragment();
-
-      // Process the children and split at display:block boundaries
-      let currentGroup = [];
-      let i = 0;
-
-      while (i < vNode.children.length) {
-        const child = vNode.children[i];
-
+    // Look for inline elements with display:block OR images with special alignment
+    const specialChildren = vNode.children.filter((child) => {
+      if (isVNode(child)) {
+        // Check for display:block inline elements
         if (
-          isVNode(child) &&
           child.properties?.style?.display === 'block' &&
           [
             'span',
@@ -1476,7 +1475,62 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
             'a',
           ].includes(child.tagName)
         ) {
-          // If we have accumulated children before this block element, create a paragraph for them
+          return true;
+        }
+
+        // Check for images with alignment styles
+        if (child.tagName === 'img') {
+          const style = child.properties?.style || {};
+          // Check for margin-based centering
+          if (style['margin-left'] === 'auto' && style['margin-right'] === 'auto') {
+            return true;
+          }
+          // Check for margin-based left/right alignment
+          if (
+            style['margin-left'] === 'auto' &&
+            (style['margin-right'] === '0' ||
+              style['margin-right'] === '0px' ||
+              !style['margin-right'])
+          ) {
+            return true;
+          }
+          if (
+            (!style['margin-left'] ||
+              style['margin-left'] === '0' ||
+              style['margin-left'] === '0px') &&
+            style['margin-right'] === 'auto'
+          ) {
+            return true;
+          }
+          // Check for display:block images with text-align
+          if (
+            style.display === 'block' &&
+            ['center', 'left', 'right', 'justify'].includes(style['text-align'])
+          ) {
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+
+    // If we found special children, split the paragraph
+    if (specialChildren.length > 0) {
+      // Create a container for all fragments
+      const allFragments = fragment();
+
+      // Process the children and split at special element boundaries
+      let currentGroup = [];
+      let i = 0;
+
+      while (i < vNode.children.length) {
+        const child = vNode.children[i];
+
+        // Check if this child needs special handling
+        const needsSpecialHandling = specialChildren.includes(child);
+
+        if (needsSpecialHandling) {
+          // If we have accumulated children before this special element, create a paragraph for them
           if (currentGroup.length > 0) {
             const beforeParagraph = await buildParagraph(
               { ...vNode, children: currentGroup },
@@ -1489,25 +1543,126 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
             currentGroup = [];
           }
 
-          // Create a paragraph for the display:block element with its text-align
-          const blockElementAttributes = { ...attributes };
-          if (
-            child.properties?.style?.['text-align'] &&
-            ['left', 'right', 'center', 'justify'].includes(
-              child.properties.style['text-align'].toLowerCase()
-            )
-          ) {
-            blockElementAttributes.textAlign = child.properties.style['text-align'].toLowerCase();
-          }
+          // Handle the special element
+          const specialAttributes = { ...attributes };
 
-          const blockElementParagraph = await buildParagraph(
-            child,
-            blockElementAttributes,
-            docxDocumentInstance
-          );
+          if (child.tagName === 'img') {
+            const style = child.properties?.style || {};
+            // Handle margin-based alignment
+            if (style['margin-left'] === 'auto' && style['margin-right'] === 'auto') {
+              specialAttributes.textAlign = 'center';
+            } else if (
+              style['margin-left'] === 'auto' &&
+              (style['margin-right'] === '0' ||
+                style['margin-right'] === '0px' ||
+                !style['margin-right'])
+            ) {
+              specialAttributes.textAlign = 'right';
+            } else if (
+              (!style['margin-left'] ||
+                style['margin-left'] === '0' ||
+                style['margin-left'] === '0px') &&
+              style['margin-right'] === 'auto'
+            ) {
+              specialAttributes.textAlign = 'left';
+            }
+            // Handle display:block with text-align
+            else if (style.display === 'block' && style['text-align']) {
+              specialAttributes.textAlign = style['text-align'];
+            }
 
-          if (blockElementParagraph) {
-            allFragments.import(blockElementParagraph);
+            // Create a paragraph specifically for this image with alignment
+            const imageParagraph = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'p');
+
+            // Build modified attributes for the image
+            const imageModifiedAttributes = modifiedStyleAttributesBuilder(
+              docxDocumentInstance,
+              child,
+              specialAttributes,
+              { isParagraph: true }
+            );
+
+            // Ensure textAlign is preserved
+            if (specialAttributes.textAlign) {
+              imageModifiedAttributes.textAlign = specialAttributes.textAlign;
+            }
+
+            const imageParagraphProperties = buildParagraphProperties(imageModifiedAttributes);
+            imageParagraph.import(imageParagraphProperties);
+
+            // Process the image itself
+            let base64String;
+            const imageSource = child.properties.src;
+            if (isValidUrl(imageSource)) {
+              base64String = await imageToBase64(imageSource).catch((error) => {
+                // eslint-disable-next-line no-console
+                console.warning(`skipping image download and conversion due to ${error}`);
+              });
+
+              if (base64String && mimeTypes.lookup(imageSource)) {
+                child.properties.src = `data:${mimeTypes.lookup(
+                  imageSource
+                )};base64, ${base64String}`;
+              } else {
+                i++;
+                // eslint-disable-next-line no-continue
+                continue;
+              }
+            } else {
+              base64String = decodeURIComponent(child.properties.src);
+              const match = base64String.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+              if (match) {
+                // eslint-disable-next-line prefer-destructuring
+                base64String = match[2];
+              }
+            }
+
+            const imageBuffer = Buffer.from(decodeURIComponent(base64String), 'base64');
+            const imageProperties = sizeOf(imageBuffer);
+
+            imageModifiedAttributes.maximumWidth =
+              imageModifiedAttributes.maximumWidth || docxDocumentInstance.availableDocumentSpace;
+            imageModifiedAttributes.originalWidth = imageProperties.width;
+            imageModifiedAttributes.originalHeight = imageProperties.height;
+
+            computeImageDimensions(child, imageModifiedAttributes);
+
+            const imageRunFragments = await buildRunOrHyperLink(
+              child,
+              { ...imageModifiedAttributes, type: 'picture', description: child.properties.alt },
+              docxDocumentInstance
+            );
+
+            if (Array.isArray(imageRunFragments)) {
+              for (let fragIndex = 0; fragIndex < imageRunFragments.length; fragIndex++) {
+                imageParagraph.import(imageRunFragments[fragIndex]);
+              }
+            } else {
+              imageParagraph.import(imageRunFragments);
+            }
+
+            imageParagraph.up();
+            allFragments.import(imageParagraph);
+          } else {
+            // Handle display:block elements as before
+            if (
+              child.properties?.style?.['text-align'] &&
+              ['left', 'right', 'center', 'justify'].includes(
+                child.properties.style['text-align'].toLowerCase()
+              )
+            ) {
+              specialAttributes.textAlign = child.properties.style['text-align'].toLowerCase();
+            }
+
+            const specialParagraph = await buildParagraph(
+              child,
+              specialAttributes,
+              docxDocumentInstance
+            );
+
+            if (specialParagraph) {
+              allFragments.import(specialParagraph);
+            }
           }
 
           // Move to the next child
