@@ -1425,6 +1425,7 @@ const computeImageDimensions = (vNode, attributes) => {
   // eslint-disable-next-line no-param-reassign
   attributes.height = modifiedHeight;
 };
+
 const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
   // Skip empty text nodes without attributes
   if (isVText(vNode) && !vNode.text.trim() && !attributes) {
@@ -1450,7 +1451,64 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
     attributes.spacing = docxDocumentInstance.defaultSpacing;
   }
 
-  // Check if we need to handle display:block inline elements OR centered images
+  // Helper function to determine image alignment
+  const getImageAlignment = (style) => {
+    if (!style) return null;
+
+    const marginLeft = style['margin-left'];
+    const marginRight = style['margin-right'];
+    const textAlign = style['text-align'];
+    const { display } = style;
+
+    // Check for margin-based alignment
+    if (marginLeft && marginRight) {
+      if (marginLeft === 'auto' && marginRight === 'auto') {
+        return 'center';
+      }
+    }
+
+    // Check for left alignment (right margin auto, left margin 0 or not set)
+    if (
+      marginRight === 'auto' &&
+      (!marginLeft ||
+        marginLeft === '0' ||
+        marginLeft === '0px' ||
+        marginLeft === 'initial' ||
+        marginLeft === 'unset')
+    ) {
+      return 'left';
+    }
+
+    // Check for right alignment (left margin auto, right margin 0 or not set)
+    if (
+      marginLeft === 'auto' &&
+      (!marginRight ||
+        marginRight === '0' ||
+        marginRight === '0px' ||
+        marginRight === 'initial' ||
+        marginRight === 'unset')
+    ) {
+      return 'right';
+    }
+
+    // Check for explicit text-align first (most reliable)
+    if (display === 'block' && textAlign) {
+      if (['left', 'center', 'right', 'justify'].includes(textAlign.toLowerCase())) {
+        return textAlign.toLowerCase();
+      }
+    }
+    // Check for float-based alignment
+    const { float } = style;
+    if (float) {
+      if (float === 'left') return 'left';
+      if (float === 'right') return 'right';
+      if (float === 'none' && marginLeft === 'auto' && marginRight === 'auto') return 'center';
+    }
+
+    return null;
+  };
+
+  // Check if we need to handle display:block inline elements OR aligned images
   if (isVNode(vNode) && vNode.tagName === 'p' && vNodeHasChildren(vNode)) {
     // Look for inline elements with display:block OR images with special alignment
     const specialChildren = vNode.children.filter((child) => {
@@ -1480,35 +1538,8 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
 
         // Check for images with alignment styles
         if (child.tagName === 'img') {
-          const style = child.properties?.style || {};
-          // Check for margin-based centering
-          if (style['margin-left'] === 'auto' && style['margin-right'] === 'auto') {
-            return true;
-          }
-          // Check for margin-based left/right alignment
-          if (
-            style['margin-left'] === 'auto' &&
-            (style['margin-right'] === '0' ||
-              style['margin-right'] === '0px' ||
-              !style['margin-right'])
-          ) {
-            return true;
-          }
-          if (
-            (!style['margin-left'] ||
-              style['margin-left'] === '0' ||
-              style['margin-left'] === '0px') &&
-            style['margin-right'] === 'auto'
-          ) {
-            return true;
-          }
-          // Check for display:block images with text-align
-          if (
-            style.display === 'block' &&
-            ['center', 'left', 'right', 'justify'].includes(style['text-align'])
-          ) {
-            return true;
-          }
+          const alignment = getImageAlignment(child.properties?.style);
+          return alignment !== null;
         }
       }
       return false;
@@ -1544,107 +1575,103 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
           }
 
           // Handle the special element
-          const specialAttributes = { ...attributes };
-
           if (child.tagName === 'img') {
-            const style = child.properties?.style || {};
-            // Handle margin-based alignment
-            if (style['margin-left'] === 'auto' && style['margin-right'] === 'auto') {
-              specialAttributes.textAlign = 'center';
-            } else if (
-              style['margin-left'] === 'auto' &&
-              (style['margin-right'] === '0' ||
-                style['margin-right'] === '0px' ||
-                !style['margin-right'])
-            ) {
-              specialAttributes.textAlign = 'right';
-            } else if (
-              (!style['margin-left'] ||
-                style['margin-left'] === '0' ||
-                style['margin-left'] === '0px') &&
-              style['margin-right'] === 'auto'
-            ) {
-              specialAttributes.textAlign = 'left';
-            }
-            // Handle display:block with text-align
-            else if (style.display === 'block' && style['text-align']) {
-              specialAttributes.textAlign = style['text-align'];
-            }
+            const alignment = getImageAlignment(child.properties?.style);
 
-            // Create a paragraph specifically for this image with alignment
-            const imageParagraph = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'p');
+            if (alignment) {
+              // Create a paragraph specifically for this image with alignment
+              const imageParagraph = fragment({ namespaceAlias: { w: namespaces.w } }).ele(
+                '@w',
+                'p'
+              );
 
-            // Build modified attributes for the image
-            const imageModifiedAttributes = modifiedStyleAttributesBuilder(
-              docxDocumentInstance,
-              child,
-              specialAttributes,
-              { isParagraph: true }
-            );
+              // Build modified attributes for the image
+              const imageModifiedAttributes = modifiedStyleAttributesBuilder(
+                docxDocumentInstance,
+                child,
+                attributes,
+                { isParagraph: true }
+              );
 
-            // Ensure textAlign is preserved
-            if (specialAttributes.textAlign) {
-              imageModifiedAttributes.textAlign = specialAttributes.textAlign;
-            }
+              // Explicitly set the alignment
+              imageModifiedAttributes.textAlign = alignment;
 
-            const imageParagraphProperties = buildParagraphProperties(imageModifiedAttributes);
-            imageParagraph.import(imageParagraphProperties);
+              const imageParagraphProperties = buildParagraphProperties(imageModifiedAttributes);
+              imageParagraph.import(imageParagraphProperties);
 
-            // Process the image itself
-            let base64String;
-            const imageSource = child.properties.src;
-            if (isValidUrl(imageSource)) {
-              base64String = await imageToBase64(imageSource).catch((error) => {
+              // Process the image itself
+              let base64String;
+              const imageSource = child.properties.src;
+
+              try {
+                if (isValidUrl(imageSource)) {
+                  base64String = await imageToBase64(imageSource).catch((error) => {
+                    // eslint-disable-next-line no-console
+                    console.warning(`skipping image download and conversion due to ${error}`);
+                    throw error;
+                  });
+
+                  if (base64String && mimeTypes.lookup(imageSource)) {
+                    child.properties.src = `data:${mimeTypes.lookup(
+                      imageSource
+                    )};base64, ${base64String}`;
+                  } else {
+                    throw new Error('Failed to process image');
+                  }
+                } else {
+                  base64String = decodeURIComponent(child.properties.src);
+                  const match = base64String.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
+                  if (match) {
+                    // eslint-disable-next-line prefer-destructuring
+                    base64String = match[2];
+                  }
+                }
+
+                const imageBuffer = Buffer.from(decodeURIComponent(base64String), 'base64');
+                const imageProperties = sizeOf(imageBuffer);
+
+                imageModifiedAttributes.maximumWidth =
+                  imageModifiedAttributes.maximumWidth ||
+                  docxDocumentInstance.availableDocumentSpace;
+                imageModifiedAttributes.originalWidth = imageProperties.width;
+                imageModifiedAttributes.originalHeight = imageProperties.height;
+
+                computeImageDimensions(child, imageModifiedAttributes);
+
+                const imageRunFragments = await buildRunOrHyperLink(
+                  child,
+                  {
+                    ...imageModifiedAttributes,
+                    type: 'picture',
+                    description: child.properties.alt,
+                  },
+                  docxDocumentInstance
+                );
+
+                if (Array.isArray(imageRunFragments)) {
+                  for (let fragIndex = 0; fragIndex < imageRunFragments.length; fragIndex++) {
+                    imageParagraph.import(imageRunFragments[fragIndex]);
+                  }
+                } else {
+                  imageParagraph.import(imageRunFragments);
+                }
+
+                imageParagraph.up();
+                allFragments.import(imageParagraph);
+              } catch (error) {
                 // eslint-disable-next-line no-console
-                console.warning(`skipping image download and conversion due to ${error}`);
-              });
-
-              if (base64String && mimeTypes.lookup(imageSource)) {
-                child.properties.src = `data:${mimeTypes.lookup(
-                  imageSource
-                )};base64, ${base64String}`;
-              } else {
-                i++;
-                // eslint-disable-next-line no-continue
-                continue;
+                console.error('Error processing aligned image:', error);
+                // Fall back to regular processing if image processing fails
+                currentGroup.push(child);
               }
             } else {
-              base64String = decodeURIComponent(child.properties.src);
-              const match = base64String.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-              if (match) {
-                // eslint-disable-next-line prefer-destructuring
-                base64String = match[2];
-              }
+              // No special alignment, add to current group
+              currentGroup.push(child);
             }
-
-            const imageBuffer = Buffer.from(decodeURIComponent(base64String), 'base64');
-            const imageProperties = sizeOf(imageBuffer);
-
-            imageModifiedAttributes.maximumWidth =
-              imageModifiedAttributes.maximumWidth || docxDocumentInstance.availableDocumentSpace;
-            imageModifiedAttributes.originalWidth = imageProperties.width;
-            imageModifiedAttributes.originalHeight = imageProperties.height;
-
-            computeImageDimensions(child, imageModifiedAttributes);
-
-            const imageRunFragments = await buildRunOrHyperLink(
-              child,
-              { ...imageModifiedAttributes, type: 'picture', description: child.properties.alt },
-              docxDocumentInstance
-            );
-
-            if (Array.isArray(imageRunFragments)) {
-              for (let fragIndex = 0; fragIndex < imageRunFragments.length; fragIndex++) {
-                imageParagraph.import(imageRunFragments[fragIndex]);
-              }
-            } else {
-              imageParagraph.import(imageRunFragments);
-            }
-
-            imageParagraph.up();
-            allFragments.import(imageParagraph);
           } else {
             // Handle display:block elements as before
+            const specialAttributes = { ...attributes };
+
             if (
               child.properties?.style?.['text-align'] &&
               ['left', 'right', 'center', 'justify'].includes(
