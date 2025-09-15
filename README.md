@@ -171,8 +171,9 @@ the layout within the resulting document.
 
 ## Page sections
 
-When you want to print sections of content logically separately, with an optional header / footer
-control you can use data-section and data-show-header and data-show-footer on content to achieve this.
+When you want to print sections of content logically separately, with optional header/footer control and custom backgrounds, you can use data attributes on content to achieve this.
+
+### Basic Section Control
 
 ```html
 <div data-section="true" data-show-header="false" data-show-footer="false">
@@ -186,11 +187,54 @@ control you can use data-section and data-show-header and data-show-footer on co
   </div>
 </div>
 ```
+### Page Backgrounds
+
+You can add custom background images to specific page sections using data attributes:
+
+```html
+<div data-section="true"
+     data-section-break="true"
+     data-background-url="https://example.com/background.jpg"
+     data-background-size="cover"
+     data-background-position="center"
+     data-background-repeat="no-repeat">
+  <div>
+    <p>Content with a custom background image</p>
+  </div>
+</div>
+```
+
+
+#### Background Data Attributes
+
+- data-background-url <[String]> URL of the background image to display on all pages in this section.
+- data-background-size <?[String]> How the background image should be sized. Options:
+  - "cover" - Scale image to cover entire page (may crop). Default.
+  - "fit" or "contain" - Scale image to fit within page (maintains aspect ratio).
+  - "stretch" - Stretch image to fill entire page (may distort).
+  - "original" - Use original image dimensions.
+
+
+- data-background-position <?[String]> Position of the background image. Options:
+  - "center" - Center the image. Default.
+  - "top-left", "top-center", "top-right"
+  - "middle-left", "middle-right"
+  - "bottom-left", "bottom-center", "bottom-right"
+
+
+- data-background-repeat <?[String]> How the background image should repeat. Options:
+  - "no-repeat" - Display image once. Default.
+  - "repeat" - Repeat in both directions.
+  - "repeat-x" - Repeat horizontally only.
+  - "repeat-y" - Repeat vertically only.
+
+  
+## Notes
+
 Native columns within docx are not appropriate for HTML conversion, as they overflow left to
 right, not onto the next page. To achieve a html-like column division tables are used to control
 the layout within the resulting document.
 
-## Notes
 
 Currently page break can be implemented by having div with classname "page-break" or style "page-break-after" despite the values of the "page-break-after", and contents inside the div element will be ignored. `<div class="page-break" style="page-break-after: always;"></div>`
 
@@ -226,7 +270,6 @@ List of supported list-style-types:
 Also you could add attribute `data-start="n"` to start the numbering from the n-th.
 
 `<ol data-start="2">` will start the numbering from ( B. b. II. ii. 2. )
-
 
 Font family doesnt work consistently for all word processor softwares
 

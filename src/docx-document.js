@@ -4,6 +4,7 @@ import https from 'https';
 import http from 'http';
 import sharp from 'sharp';
 import * as fs from 'fs/promises';
+import { createHash } from 'crypto';
 import { convertToODTTF } from './utils/odttf';
 import {
   generateCoreXML,
@@ -201,6 +202,10 @@ class DocxDocument {
     this.sections = [];
     this.currentSectionId = 0;
     this.documentXML = null;
+
+    this.headerVariants = new Map(); // Track all header combinations
+    this.backgroundImageCache = new Map(); // Deduplicate background images
+    this.headerDeduplicationMap = new Map(); // Deduplicate identical headers
 
     this.generateContentTypesXML = this.generateContentTypesXML.bind(this);
     this.generateDocumentXML = this.generateDocumentXML.bind(this);
@@ -847,6 +852,384 @@ class DocxDocument {
       footerHeight: 0,
       typeName: footerTypeName,
     };
+  }
+
+  async generateHeaderWithBackground(htmlContent, headerConfig, backgroundInfo, variantName) {
+    const headerId = this.lastHeaderId + 1;
+    this.lastHeaderId = headerId;
+
+    const headerXML = create({
+      encoding: 'UTF-8',
+      standalone: true,
+      namespaceAlias: {
+        w: namespaces.w,
+        r: namespaces.r,
+        wp: namespaces.wp,
+        a: namespaces.a,
+        pic: namespaces.pic,
+        ve: namespaces.ve,
+        o: namespaces.o,
+        v: namespaces.v,
+        w10: namespaces.w10,
+      },
+    }).ele('@w', 'hdr');
+
+    let headerHeight = null;
+
+    // Step 1: Add background if present
+    if (backgroundInfo && backgroundInfo.backgroundUrl) {
+      await this.addBackgroundToHeader(headerXML, backgroundInfo, headerId);
+    }
+
+    // Step 2: Add header content if present
+    if (htmlContent || headerConfig) {
+      // Process regular header content
+      if (htmlContent) {
+        const { convertHTML } = await import('html-to-vdom'); // Dynamic import if needed
+        const vTree = convertHTML(htmlContent);
+        const XMLFragment = fragment();
+
+        await convertVTreeToXML(this, vTree, XMLFragment);
+        headerXML.import(XMLFragment);
+      }
+
+      // Add logos and other header config
+      if (headerConfig) {
+        if (headerConfig.logos && Array.isArray(headerConfig.logos)) {
+          // eslint-disable-next-line no-restricted-syntax
+          for (const logo of headerConfig.logos) {
+            // eslint-disable-next-line no-await-in-loop
+            await this.addLogo(headerXML, logo, headerId);
+          }
+        }
+      }
+
+      headerHeight = this.calculateHeaderHeight();
+    } else {
+      // Empty header (just background or completely empty)
+      const emptyParagraph = headerXML.ele('@w', 'p');
+      const pPr = emptyParagraph.ele('@w', 'pPr');
+      const pStyle = pPr.ele('@w', 'pStyle');
+      pStyle.att('@w', 'val', 'Header');
+
+      headerHeight = backgroundInfo ? 0 : 0; // Background headers don't affect layout
+    }
+
+    return {
+      headerId: `${headerId}`,
+      headerXML,
+      headerHeight,
+      variantName,
+    };
+  }
+
+  static calculateBackgroundDimensions(
+    imageWidth,
+    imageHeight,
+    pageWidth,
+    pageHeight,
+    backgroundSize,
+    backgroundPosition
+  ) {
+    let finalWidth = imageWidth * 9525; // Convert to EMUs
+    let finalHeight = imageHeight * 9525;
+    let containScale;
+    let coverScale;
+
+    // Handle background-size (same as before)
+    switch (backgroundSize) {
+      case 'stretch':
+        finalWidth = pageWidth;
+        finalHeight = pageHeight;
+        break;
+      case 'fit':
+      case 'contain':
+        containScale = Math.min(pageWidth / finalWidth, pageHeight / finalHeight);
+        finalWidth *= containScale;
+        finalHeight *= containScale;
+        break;
+      case 'cover':
+        coverScale = Math.max(pageWidth / finalWidth, pageHeight / finalHeight);
+        finalWidth *= coverScale;
+        finalHeight *= coverScale;
+        break;
+      case 'original':
+      default:
+        break;
+    }
+
+    // Explicit position mapping
+    const position = backgroundPosition || 'center';
+    let posX = 0;
+    let posY = 0;
+
+    // Map all your specific positions
+    switch (position) {
+      case 'top-left':
+        posX = 0;
+        posY = 0;
+        break;
+      case 'top-center':
+        posX = (pageWidth - finalWidth) / 2;
+        posY = 0;
+        break;
+      case 'top-right':
+        posX = pageWidth - finalWidth;
+        posY = 0;
+        break;
+      case 'middle-left':
+        posX = 0;
+        posY = (pageHeight - finalHeight) / 2;
+        break;
+      case 'center':
+        posX = (pageWidth - finalWidth) / 2;
+        posY = (pageHeight - finalHeight) / 2;
+        break;
+      case 'middle-right':
+        posX = pageWidth - finalWidth;
+        posY = (pageHeight - finalHeight) / 2;
+        break;
+      case 'bottom-left':
+        posX = 0;
+        posY = pageHeight - finalHeight;
+        break;
+      case 'bottom-center':
+        posX = (pageWidth - finalWidth) / 2;
+        posY = pageHeight - finalHeight;
+        break;
+      case 'bottom-right':
+        posX = pageWidth - finalWidth;
+        posY = pageHeight - finalHeight;
+        break;
+      default:
+        // Default to center
+        posX = (pageWidth - finalWidth) / 2;
+        posY = (pageHeight - finalHeight) / 2;
+        break;
+    }
+
+    // Ensure positions don't go negative
+    posX = Math.max(0, posX);
+    posY = Math.max(0, posY);
+
+    return { finalWidth, finalHeight, posX, posY };
+  }
+
+  // Add background to header
+  async addBackgroundToHeader(headerXML, backgroundInfo, headerId) {
+    // eslint-disable-next-line no-unused-vars
+    const { backgroundUrl, backgroundSize, backgroundPosition, backgroundRepeat } = backgroundInfo;
+
+    const debugParagraph = headerXML.ele('@w', 'p');
+    const debugRun = debugParagraph.ele('@w', 'r');
+    const debugText = debugRun.ele('@w', 't');
+    debugText.att('@xml', 'space', 'preserve');
+    debugText.txt(`Section ${headerId} Background`);
+    // Check if we've already processed this image
+    let imageRelationshipId;
+    let imageFile;
+
+    if (this.backgroundImageCache.has(backgroundUrl)) {
+      const cachedImage = this.backgroundImageCache.get(backgroundUrl);
+      imageFile = cachedImage.imageFile;
+
+      // Create a new relationship for this header, but reuse the image file
+      imageRelationshipId = this.createDocumentRelationships(
+        `header${headerId}`,
+        imageType,
+        `media/${imageFile.fileNameWithExtension}`,
+        'Internal'
+      );
+    } else {
+      // Process new image
+      const { base64String, imageWidth, imageHeight } = await this.fetchImageAndGetDimensions(
+        backgroundUrl
+      );
+      imageFile = this.createMediaFile(base64String);
+
+      // Cache the image
+      this.backgroundImageCache.set(backgroundUrl, {
+        imageFile,
+        imageWidth,
+        imageHeight,
+        base64String,
+      });
+
+      imageRelationshipId = this.createDocumentRelationships(
+        `header${headerId}`,
+        imageType,
+        `media/${imageFile.fileNameWithExtension}`,
+        'Internal'
+      );
+      // Add to zip only once
+      this.zip
+        .folder('word/media')
+        .file(imageFile.fileNameWithExtension, imageFile.fileContent, { base64: true });
+    }
+
+    const cachedImage = this.backgroundImageCache.get(backgroundUrl);
+    const { imageWidth, imageHeight } = cachedImage;
+
+    // Calculate positioning and sizing
+    const pageWidthEMU = this.width * 635;
+    const pageHeightEMU = this.height * 635;
+
+    // eslint-disable-next-line no-unused-vars
+    const { finalWidth, finalHeight, posX, posY } = DocxDocument.calculateBackgroundDimensions(
+      imageWidth,
+      imageHeight,
+      pageWidthEMU,
+      pageHeightEMU,
+      backgroundSize,
+      backgroundPosition
+    );
+
+    // Add background to header XML (simplified structure)
+    const bgParagraph = headerXML.ele('@w', 'p');
+
+    // Add paragraph properties
+    const pPr = bgParagraph.ele('@w', 'pPr');
+    const spacing = pPr.ele('@w', 'spacing');
+    spacing.att('@w', 'before', '0');
+    spacing.att('@w', 'after', '0');
+    spacing.att('@w', 'line', '0');
+    spacing.att('@w', 'lineRule', 'auto');
+
+    // Add the run with drawing
+    const run = bgParagraph.ele('@w', 'r');
+    const drawing = run.ele('@w', 'drawing');
+    const anchor = drawing.ele('@wp', 'anchor');
+
+    // Set anchor attributes
+    anchor.att('behindDoc', '1');
+    anchor.att('distT', '0');
+    anchor.att('distB', '0');
+    anchor.att('distL', '0');
+    anchor.att('distR', '0');
+    anchor.att('simplePos', '0');
+    anchor.att('relativeHeight', '0');
+    anchor.att('locked', '1');
+    anchor.att('layoutInCell', '0');
+    anchor.att('allowOverlap', '1');
+
+    // Add positioning
+    const simplePos = anchor.ele('@wp', 'simplePos');
+    simplePos.att('x', '0');
+    simplePos.att('y', '0');
+
+    const positionH = anchor.ele('@wp', 'positionH');
+    positionH.att('relativeFrom', 'page');
+    const posOffsetH = positionH.ele('@wp', 'posOffset');
+    posOffsetH.txt(posX.toString());
+
+    const positionV = anchor.ele('@wp', 'positionV');
+    positionV.att('relativeFrom', 'page'); // Make sure this is 'page' not 'paragraph' or 'margin'
+    const posOffsetV = positionV.ele('@wp', 'posOffset');
+    posOffsetV.txt(posY.toString());
+
+    // Continue with extent, docPr, graphic, etc. (similar to previous implementation)
+    const extent = anchor.ele('@wp', 'extent');
+    extent.att('cx', finalWidth.toString());
+    extent.att('cy', finalHeight.toString());
+
+    const effectExtent = anchor.ele('@wp', 'effectExtent');
+    effectExtent.att('l', '0');
+    effectExtent.att('t', '0');
+    effectExtent.att('r', '0');
+    effectExtent.att('b', '0');
+
+    anchor.ele('@wp', 'wrapNone');
+
+    const docPr = anchor.ele('@wp', 'docPr');
+    docPr.att('id', imageFile.id);
+    docPr.att('name', 'Page Background');
+
+    // Add the rest of the graphic structure...
+    const cNvGraphicFramePr = anchor.ele('@wp', 'cNvGraphicFramePr');
+    const graphicFrameLocks = cNvGraphicFramePr.ele('@a', 'graphicFrameLocks');
+    graphicFrameLocks.att('noChangeAspect', '1');
+
+    const graphic = anchor.ele('@a', 'graphic');
+    const graphicData = graphic.ele('@a', 'graphicData');
+    graphicData.att('uri', 'http://schemas.openxmlformats.org/drawingml/2006/picture');
+
+    const pic = graphicData.ele('@pic', 'pic');
+    const nvPicPr = pic.ele('@pic', 'nvPicPr');
+    const cNvPr = nvPicPr.ele('@pic', 'cNvPr');
+    cNvPr.att('id', '0');
+    cNvPr.att('name', 'Page Background');
+    nvPicPr.ele('@pic', 'cNvPicPr');
+
+    const blipFill = pic.ele('@pic', 'blipFill');
+    const blip = blipFill.ele('@a', 'blip');
+    blip.att('@r', 'embed', `rId${imageRelationshipId}`);
+
+    const stretch = blipFill.ele('@a', 'stretch');
+    stretch.ele('@a', 'fillRect');
+
+    const spPr = pic.ele('@pic', 'spPr');
+    const xfrm = spPr.ele('@a', 'xfrm');
+    const off = xfrm.ele('@a', 'off');
+    off.att('x', '0');
+    off.att('y', '0');
+
+    const ext = xfrm.ele('@a', 'ext');
+    ext.att('cx', finalWidth.toString());
+    ext.att('cy', finalHeight.toString());
+
+    const prstGeom = spPr.ele('@a', 'prstGeom');
+    prstGeom.att('prst', 'rect');
+    prstGeom.ele('@a', 'avLst');
+
+    return imageRelationshipId;
+  }
+
+  // Generate the appropriate header variant for a section
+  async generateSectionHeader(sectionInfo, htmlContent = null, headerConfig = null) {
+    // eslint-disable-next-line no-unused-vars
+    const { headerType, backgroundUrl, backgroundSize, backgroundPosition, backgroundRepeat } =
+      sectionInfo;
+
+    // Create variant name based on combination
+    let variantName;
+    const hasBackground = !!backgroundUrl;
+    const hasCustomHeader = headerType !== 'none' && headerType !== 'default';
+
+    if (hasBackground && hasCustomHeader) {
+      variantName = `${headerType}_bg_${DocxDocument.hashBackgroundInfo(sectionInfo)}`;
+    } else if (hasBackground && !hasCustomHeader) {
+      variantName = `none_bg_${DocxDocument.hashBackgroundInfo(sectionInfo)}`;
+    } else if (!hasBackground && hasCustomHeader) {
+      variantName = headerType;
+    } else {
+      variantName = 'none';
+    }
+
+    // Check if we already have this variant
+    if (this.headerVariants.has(variantName)) {
+      return this.headerVariants.get(variantName);
+    }
+
+    // Generate new header
+    const headerResult = await this.generateHeaderWithBackground(
+      htmlContent,
+      headerConfig,
+      hasBackground ? sectionInfo : null,
+      variantName
+    );
+
+    // Cache the result
+    this.headerVariants.set(variantName, headerResult);
+
+    return headerResult;
+  }
+
+  // Create a short hash for background info
+  static hashBackgroundInfo(backgroundInfo) {
+    const info = `${backgroundInfo.backgroundUrl || ''}|${backgroundInfo.backgroundSize || ''}|${
+      backgroundInfo.backgroundPosition || ''
+    }|${backgroundInfo.backgroundRepeat || ''}`;
+    return createHash('md5').update(info).digest('hex').substring(0, 8);
   }
 
   async generateHeaderXML(vTree, headerConfig, headerTypeName = 'default') {

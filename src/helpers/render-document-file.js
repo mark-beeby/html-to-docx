@@ -68,7 +68,7 @@ export const buildImage = async (docxDocumentInstance, vNode, maximumWidth = nul
     const imageBuffer = Buffer.from(response.fileContent, 'base64');
     const imageProperties = sizeOf(imageBuffer);
 
-    const imageFragment = await xmlBuilder.buildParagraph(
+    return xmlBuilder.buildParagraph(
       vNode,
       {
         type: 'picture',
@@ -82,8 +82,6 @@ export const buildImage = async (docxDocumentInstance, vNode, maximumWidth = nul
       },
       docxDocumentInstance
     );
-
-    return imageFragment;
   }
 };
 
@@ -357,6 +355,12 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
       const headerType = vNode.properties.attributes['data-header-type'] || 'default';
       const footerType = vNode.properties.attributes['data-footer-type'] || 'default';
 
+      // Background data
+      const backgroundUrl = vNode.properties.attributes['data-background-url'];
+      const backgroundSize = vNode.properties.attributes['data-background-size'];
+      const backgroundPosition = vNode.properties.attributes['data-background-position'];
+      const backgroundRepeat = vNode.properties.attributes['data-background-repeat'];
+
       // Store section information
       let margins = null;
       if (vNode.properties.attributes['data-margins']) {
@@ -372,6 +376,10 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
         index: sectionIndex,
         headerType,
         footerType,
+        backgroundUrl,
+        backgroundSize,
+        backgroundPosition,
+        backgroundRepeat,
         margins,
       });
       // eslint-disable-next-line no-param-reassign
@@ -379,8 +387,60 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     }
 
     // For data-section divs, we'll create a section break with its own properties
+    // For data-section divs, we'll create a section break with its own properties
     if (isProfilePage) {
-      // Create a section break with its own properties
+      // Extract section data
+      let headerType = vNode.properties.attributes['data-header-type'] || 'default';
+      const footerType = vNode.properties.attributes['data-footer-type'] || 'default';
+      const backgroundUrl = vNode.properties.attributes['data-background-url'];
+      const backgroundSize = vNode.properties.attributes['data-background-size'];
+      const backgroundPosition = vNode.properties.attributes['data-background-position'];
+      const backgroundRepeat = vNode.properties.attributes['data-background-repeat'];
+
+      // Generate header WITH background if needed
+      if (backgroundUrl) {
+        const sectionHeaderResult = await docxDocumentInstance.generateSectionHeader(
+          {
+            headerType,
+            backgroundUrl: backgroundUrl.replaceAll('&amp;', '&'),
+            backgroundSize,
+            backgroundPosition,
+            backgroundRepeat,
+          },
+          null,
+          null
+        );
+
+        // Create header file and relationship
+        const headerFileName = `header${sectionHeaderResult.headerId}.xml`;
+        docxDocumentInstance.zip
+          .folder('word')
+          .file(headerFileName, sectionHeaderResult.headerXML.toString({ prettyPrint: true }), {
+            createFolders: false,
+          });
+
+        const headerRelationshipId = docxDocumentInstance.createDocumentRelationships(
+          docxDocumentInstance.relationshipFilename,
+          'header',
+          headerFileName,
+          'Internal'
+        );
+
+        // Store header (use unique key for background headers)
+        const uniqueHeaderKey = backgroundUrl ? `${headerType}_bg` : headerType;
+        // eslint-disable-next-line no-param-reassign
+        docxDocumentInstance.headerObjects[uniqueHeaderKey] = {
+          headerId: sectionHeaderResult.headerId,
+          relationshipId: headerRelationshipId,
+          height: sectionHeaderResult.headerHeight || 0,
+          variantName: sectionHeaderResult.variantName,
+        };
+
+        // Update headerType to use the unique key
+        headerType = uniqueHeaderKey;
+      }
+
+      // Create a section break with its own properties (SAME STRUCTURE AS BEFORE)
       const sectionBreakPara = fragment({ namespaceAlias: { w: namespaces.w, r: namespaces.r } })
         .ele('w:p')
         .ele('w:r')
@@ -397,32 +457,22 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
         .att('w:val', 'nextPage')
         .up();
 
-      // Add section properties based on custom attributes if present
-      // Check if this data-section has custom margins
-      const hasCustomMargins = vNode.properties.attributes['data-margins'];
-      let margins = null;
-
-      // Check for header/footer options
-      const headerType = vNode.properties.attributes['data-header-type'] || 'default';
-      const footerType = vNode.properties.attributes['data-footer-type'] || 'default';
+      // Calculate heights (same as before)
       const showHeader = headerType !== 'none';
       const showFooter = footerType !== 'none';
       let headerHeight = showHeader ? docxDocumentInstance.margins.header : 0;
       let footerHeight = showFooter ? docxDocumentInstance.margins.footer : 0;
-      if (
-        docxDocumentInstance.headerObjects &&
-        docxDocumentInstance.headerObjects[headerType] &&
-        showHeader
-      ) {
+
+      if (docxDocumentInstance.headerObjects[headerType] && showHeader) {
         headerHeight = docxDocumentInstance.headerObjects[headerType].height ?? headerHeight;
       }
-      if (
-        docxDocumentInstance.footerObjects &&
-        docxDocumentInstance.footerObjects[footerType] &&
-        showFooter
-      ) {
+      if (docxDocumentInstance.footerObjects[footerType] && showFooter) {
         footerHeight = docxDocumentInstance.footerObjects[footerType].height ?? footerHeight;
       }
+
+      // Handle margins (same as before)
+      const hasCustomMargins = vNode.properties.attributes['data-margins'];
+      let margins = null;
 
       if (hasCustomMargins) {
         try {
