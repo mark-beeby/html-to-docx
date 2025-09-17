@@ -471,32 +471,23 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
 
         // Update headerType to use the unique key
         headerType = uniqueHeaderTypeName;
-      } else {
-        // Generate header WITHOUT background - create explicit no-background header
-        const noBackgroundHeaderResult = await docxDocumentInstance.generateSectionHeader(
-          {
-            headerType,
-            // Explicitly no background properties
-            backgroundUrl: null,
-            backgroundSize: null,
-            backgroundPosition: null,
-            backgroundRepeat: null,
-          },
-          null,
-          null
-        );
+      } else if (backgroundUrl) {
+        // headerType is 'none' - but we still might need a background-only header
+        const noContentHeaderResult = await docxDocumentInstance.generateSectionHeader({
+          headerType,
+          backgroundUrl: backgroundUrl.replaceAll('&amp;', '&'),
+          backgroundSize,
+          backgroundPosition,
+          backgroundRepeat,
+        });
 
-        // Create header file and relationship for no-background header
-        const headerFileName = `header${noBackgroundHeaderResult.headerId}.xml`;
+        // Create header file and relationship for background-only header
+        const headerFileName = `header${noContentHeaderResult.headerId}.xml`;
         docxDocumentInstance.zip
           .folder('word')
-          .file(
-            headerFileName,
-            noBackgroundHeaderResult.headerXML.toString({ prettyPrint: true }),
-            {
-              createFolders: false,
-            }
-          );
+          .file(headerFileName, noContentHeaderResult.headerXML.toString({ prettyPrint: true }), {
+            createFolders: false,
+          });
 
         const headerRelationshipId = docxDocumentInstance.createDocumentRelationships(
           docxDocumentInstance.relationshipFilename,
@@ -505,18 +496,19 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
           'Internal'
         );
 
-        // Store header with explicit no-background key
-        const noBackgroundHeaderKey = `${headerType}_no_bg`;
+        // Store header with background-only key
+        const backgroundOnlyHeaderKey = `${headerType}_bg_only`;
         // eslint-disable-next-line no-param-reassign
-        docxDocumentInstance.headerObjects[noBackgroundHeaderKey] = {
-          headerId: noBackgroundHeaderResult.headerId,
+        docxDocumentInstance.headerObjects[backgroundOnlyHeaderKey] = {
+          headerId: noContentHeaderResult.headerId,
           relationshipId: headerRelationshipId,
-          height: noBackgroundHeaderResult.headerHeight || 0,
-          variantName: noBackgroundHeaderResult.variantName,
+          height: noContentHeaderResult.headerHeight || 0,
+          variantName: noContentHeaderResult.variantName,
         };
 
-        // Update headerType to use the no-background key
-        headerType = noBackgroundHeaderKey;
+        // Update headerType to use the background-only key
+        headerType = backgroundOnlyHeaderKey;
+        // If no background URL and headerType is 'none', we don't generate any header
       }
 
       // Create a section break with its own properties (SAME STRUCTURE AS BEFORE)
