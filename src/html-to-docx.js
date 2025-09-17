@@ -194,10 +194,16 @@ async function addFilesToContainer(
 
   if (docxDocument.header && (headerHTMLString || headerConfig)) {
     const vTree = headerHTMLString ? convertHTML(headerHTMLString) : null;
+
+    // Store the default header content for later use by sections
+    docxDocument.defaultHeaderVTree = vTree;
+    docxDocument.defaultHeaderConfig = headerConfig;
+
     docxDocument.relationshipFilename = headerFileName;
     const { headerId, headerXML, headerHeight } = await docxDocument.generateHeaderXML(
       vTree,
-      headerConfig
+      headerConfig,
+      'default' // Explicitly set the header type name
     );
 
     if (headerHeight !== null) {
@@ -217,11 +223,12 @@ async function addFilesToContainer(
     zip
       .folder(wordFolder)
       .file(fileNameWithExt, headerXML.toString({ prettyPrint: true }), { createFolders: false });
+
     docxDocument.headerObjects.default = {
       headerId,
       relationshipId,
       type: docxDocument.headerType,
-      height: docxDocument.headerObjects.default.height,
+      height: headerHeight, // Make sure we're using the calculated height
     };
   }
 

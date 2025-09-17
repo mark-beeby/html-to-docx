@@ -854,75 +854,6 @@ class DocxDocument {
     };
   }
 
-  async generateHeaderWithBackground(htmlContent, headerConfig, backgroundInfo, variantName) {
-    const headerId = this.lastHeaderId + 1;
-    this.lastHeaderId = headerId;
-
-    const headerXML = create({
-      encoding: 'UTF-8',
-      standalone: true,
-      namespaceAlias: {
-        w: namespaces.w,
-        r: namespaces.r,
-        wp: namespaces.wp,
-        a: namespaces.a,
-        pic: namespaces.pic,
-        ve: namespaces.ve,
-        o: namespaces.o,
-        v: namespaces.v,
-        w10: namespaces.w10,
-      },
-    }).ele('@w', 'hdr');
-
-    let headerHeight = null;
-
-    // Step 1: Add background if present
-    if (backgroundInfo && backgroundInfo.backgroundUrl) {
-      await this.addBackgroundToHeader(headerXML, backgroundInfo, headerId);
-    }
-
-    // Step 2: Add header content if present
-    if (htmlContent || headerConfig) {
-      // Process regular header content
-      if (htmlContent) {
-        const { convertHTML } = await import('html-to-vdom'); // Dynamic import if needed
-        const vTree = convertHTML(htmlContent);
-        const XMLFragment = fragment();
-
-        await convertVTreeToXML(this, vTree, XMLFragment);
-        headerXML.import(XMLFragment);
-      }
-
-      // Add logos and other header config
-      if (headerConfig) {
-        if (headerConfig.logos && Array.isArray(headerConfig.logos)) {
-          // eslint-disable-next-line no-restricted-syntax
-          for (const logo of headerConfig.logos) {
-            // eslint-disable-next-line no-await-in-loop
-            await this.addLogo(headerXML, logo, headerId);
-          }
-        }
-      }
-
-      headerHeight = this.calculateHeaderHeight();
-    } else {
-      // Empty header (just background or completely empty)
-      const emptyParagraph = headerXML.ele('@w', 'p');
-      const pPr = emptyParagraph.ele('@w', 'pPr');
-      const pStyle = pPr.ele('@w', 'pStyle');
-      pStyle.att('@w', 'val', 'Header');
-
-      headerHeight = backgroundInfo ? 0 : 0; // Background headers don't affect layout
-    }
-
-    return {
-      headerId: `${headerId}`,
-      headerXML,
-      headerHeight,
-      variantName,
-    };
-  }
-
   static calculateBackgroundDimensions(
     imageWidth,
     imageHeight,
@@ -1020,11 +951,6 @@ class DocxDocument {
     // eslint-disable-next-line no-unused-vars
     const { backgroundUrl, backgroundSize, backgroundPosition, backgroundRepeat } = backgroundInfo;
 
-    const debugParagraph = headerXML.ele('@w', 'p');
-    const debugRun = debugParagraph.ele('@w', 'r');
-    const debugText = debugRun.ele('@w', 't');
-    debugText.att('@xml', 'space', 'preserve');
-    debugText.txt(`Section ${headerId} Background`);
     // Check if we've already processed this image
     let imageRelationshipId;
     let imageFile;
@@ -1184,48 +1110,72 @@ class DocxDocument {
     return imageRelationshipId;
   }
 
-  // Generate the appropriate header variant for a section
-  async generateSectionHeader(sectionInfo, htmlContent = null, headerConfig = null) {
-    // eslint-disable-next-line no-unused-vars
+  // Generate header with background only - no complex content processing
+  async generateSectionHeader(sectionInfo) {
     const { headerType, backgroundUrl, backgroundSize, backgroundPosition, backgroundRepeat } =
       sectionInfo;
 
-    // Create variant name based on combination
-    let variantName;
-    const hasBackground = !!backgroundUrl;
-    const hasCustomHeader = headerType !== 'none' && headerType !== 'default';
-
-    if (hasBackground && hasCustomHeader) {
-      variantName = `${headerType}_bg_${DocxDocument.hashBackgroundInfo(sectionInfo)}`;
-    } else if (hasBackground && !hasCustomHeader) {
-      variantName = `none_bg_${DocxDocument.hashBackgroundInfo(sectionInfo)}`;
-    } else if (!hasBackground && hasCustomHeader) {
-      variantName = headerType;
-    } else {
-      variantName = 'none';
-    }
+    // Create variant name based on background
+    const variantName = `${headerType}_bg_${this.hashBackgroundInfo(sectionInfo)}`;
 
     // Check if we already have this variant
     if (this.headerVariants.has(variantName)) {
       return this.headerVariants.get(variantName);
     }
 
-    // Generate new header
-    const headerResult = await this.generateHeaderWithBackground(
-      htmlContent,
-      headerConfig,
-      hasBackground ? sectionInfo : null,
-      variantName
+    const headerId = this.lastHeaderId + 1;
+    this.lastHeaderId = headerId;
+
+    const headerXML = create({
+      encoding: 'UTF-8',
+      standalone: true,
+      namespaceAlias: {
+        w: namespaces.w,
+        r: namespaces.r,
+        wp: namespaces.wp,
+        a: namespaces.a,
+        pic: namespaces.pic,
+        ve: namespaces.ve,
+        o: namespaces.o,
+        v: namespaces.v,
+        w10: namespaces.w10,
+      },
+    }).ele('@w', 'hdr');
+
+    // Add background
+    await this.addBackgroundToHeader(
+      headerXML,
+      {
+        backgroundUrl,
+        backgroundSize,
+        backgroundPosition,
+        backgroundRepeat,
+      },
+      headerId
     );
 
-    // Cache the result
-    this.headerVariants.set(variantName, headerResult);
+    // Add a simple header paragraph (no complex content processing)
+    const headerParagraph = headerXML.ele('@w', 'p');
+    const pPr = headerParagraph.ele('@w', 'pPr');
+    const pStyle = pPr.ele('@w', 'pStyle');
+    pStyle.att('@w', 'val', 'Header');
 
-    return headerResult;
+    const result = {
+      headerId: `${headerId}`,
+      headerXML,
+      headerHeight: 720, // Simple fixed height for background headers
+      variantName,
+    };
+
+    // Cache the result
+    this.headerVariants.set(variantName, result);
+
+    return result;
   }
 
   // Create a short hash for background info
-  static hashBackgroundInfo(backgroundInfo) {
+  // eslint-disable-next-line class-methods-use-this
+  hashBackgroundInfo(backgroundInfo) {
     const info = `${backgroundInfo.backgroundUrl || ''}|${backgroundInfo.backgroundSize || ''}|${
       backgroundInfo.backgroundPosition || ''
     }|${backgroundInfo.backgroundRepeat || ''}`;
@@ -1253,11 +1203,28 @@ class DocxDocument {
       },
     }).ele('@w', 'hdr');
 
+    // Reset these for each header generation
     this.backgroundImageHeight = 0;
     this.logoHeights = [];
+    this.vTreeHeight = 0; // Add this reset
 
     let headerHeight = null;
 
+    // Add page background if present in headerConfig
+    if (headerConfig && headerConfig.pageBackground && headerConfig.pageBackground.url) {
+      await this.addBackgroundToHeader(
+        headerXML,
+        {
+          backgroundUrl: headerConfig.pageBackground.url,
+          backgroundSize: headerConfig.pageBackground.size,
+          backgroundPosition: headerConfig.pageBackground.position,
+          backgroundRepeat: headerConfig.pageBackground.repeat,
+        },
+        headerId
+      );
+    }
+
+    // Process vTree content
     if (vTree) {
       const XMLFragment = fragment();
       await convertVTreeToXML(this, vTree, XMLFragment);
@@ -1265,8 +1232,8 @@ class DocxDocument {
       const firstParagraph = XMLFragment.first();
       if (
         firstParagraph.node?.nodeName !== 'p' &&
-        ((headerConfig.logos && Array.isArray(headerConfig?.logos)) ||
-          (headerConfig.backgroundImage && headerConfig.backgroundImage?.url))
+        ((headerConfig && headerConfig.logos && Array.isArray(headerConfig.logos)) ||
+          (headerConfig && headerConfig.backgroundImage && headerConfig.backgroundImage?.url))
       ) {
         const paragraphFragment = await xmlBuilder.buildParagraph(vTree, {}, this);
         headerXML.import(paragraphFragment);
@@ -1275,9 +1242,10 @@ class DocxDocument {
         headerXML.import(XMLFragment);
       }
 
-      this.vTreeHeight = Math.ceil(this.estimateVTreeHeight(XMLFragment) / 635); // Convert EMUs to TWIPs
+      this.vTreeHeight = Math.ceil(this.estimateVTreeHeight(XMLFragment) / 635);
     }
 
+    // Process other headerConfig items
     if (headerConfig) {
       if (headerConfig.backgroundImage && headerConfig.backgroundImage?.url) {
         const backgroundHeight = await this.addBackgroundImage(
@@ -1288,32 +1256,22 @@ class DocxDocument {
           pageHeightEMU,
           'header'
         );
-        this.backgroundImageHeight = Math.ceil(backgroundHeight / 635); // Convert EMUs to TWIPs
+        this.backgroundImageHeight = Math.ceil(backgroundHeight / 635);
       }
       if (headerConfig.logos && Array.isArray(headerConfig.logos)) {
         // eslint-disable-next-line no-restricted-syntax
         for (const logo of headerConfig.logos) {
           // eslint-disable-next-line no-await-in-loop
           const logoHeight = await this.addLogo(headerXML, logo, headerId);
-          this.logoHeights.push(Math.ceil(logoHeight / 635)); // Convert EMUs to TWIPs
+          this.logoHeights.push(Math.ceil(logoHeight / 635));
         }
       }
     }
 
-    if (headerConfig) {
-      // Calculate the header height
+    // Calculate final height
+    if (vTree || headerConfig) {
       headerHeight = this.calculateHeaderHeight();
     }
-    // Store the header XML by type name to support multiple sections
-    if (!this.headerXMLs) {
-      this.headerXMLs = {};
-    }
-
-    // Store by type name
-    this.headerXMLs[headerTypeName] = generateXMLString(
-      headerXML.toString({ prettyPrint: true }),
-      `word/header${headerId}.xml`
-    );
 
     // Store header object by type name for sectPr references
     this.headerObjects[headerTypeName] = {
@@ -1321,7 +1279,6 @@ class DocxDocument {
       height: headerHeight,
     };
 
-    // Return all the header information including type name
     return { headerId: `${headerId}`, headerXML, headerHeight, typeName: headerTypeName };
   }
 

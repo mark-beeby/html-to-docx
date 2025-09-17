@@ -313,8 +313,8 @@ MIT
 
 ## Contributors
 
-<a href="https://github.com/privateomega/html-to-docx/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=privateomega/html-to-docx" />
+<a href="https://github.com/mark-beeby/html-to-docx/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=mark-beeby/html-to-docx" />
 </a>
 
 Made with [contrib.rocks](https://contrib.rocks).

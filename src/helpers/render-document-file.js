@@ -397,27 +397,106 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
       const backgroundPosition = vNode.properties.attributes['data-background-position'];
       const backgroundRepeat = vNode.properties.attributes['data-background-repeat'];
 
-      // Generate header WITH background if needed
-      if (backgroundUrl) {
-        const sectionHeaderResult = await docxDocumentInstance.generateSectionHeader(
+      // Only generate header if headerType is not 'none'
+      if (headerType !== 'none') {
+        // Get the existing header content from the document-level header
+        let existingHeaderVTree = null;
+        let existingHeaderConfig = {};
+
+        if (headerType === 'default' && docxDocumentInstance.defaultHeaderVTree) {
+          existingHeaderVTree = docxDocumentInstance.defaultHeaderVTree;
+        }
+
+        if (headerType === 'default' && docxDocumentInstance.defaultHeaderConfig) {
+          // Make a deep copy to avoid modifying the original
+          existingHeaderConfig = JSON.parse(
+            JSON.stringify(docxDocumentInstance.defaultHeaderConfig)
+          );
+        }
+
+        // Create modified header config that includes page background if present
+        const modifiedHeaderConfig = { ...existingHeaderConfig };
+
+        if (backgroundUrl) {
+          modifiedHeaderConfig.pageBackground = {
+            url: backgroundUrl.replaceAll('&amp;', '&'),
+            size: backgroundSize,
+            position: backgroundPosition,
+            repeat: backgroundRepeat,
+          };
+        }
+
+        // Create unique header type name based on whether it has background
+        const uniqueHeaderTypeName = backgroundUrl
+          ? `${headerType}_bg_${docxDocumentInstance.hashBackgroundInfo({
+              backgroundUrl,
+              backgroundSize,
+              backgroundPosition,
+              backgroundRepeat,
+            })}`
+          : headerType;
+
+        // Only generate if we don't already have this header variant
+        if (!docxDocumentInstance.headerObjects[uniqueHeaderTypeName]) {
+          // Use your existing generateHeaderXML method
+          const headerResult = await docxDocumentInstance.generateHeaderXML(
+            existingHeaderVTree,
+            modifiedHeaderConfig,
+            uniqueHeaderTypeName
+          );
+
+          // Create header file and relationship
+          const headerFileName = `header${headerResult.headerId}.xml`;
+          docxDocumentInstance.zip
+            .folder('word')
+            .file(headerFileName, headerResult.headerXML.toString({ prettyPrint: true }), {
+              createFolders: false,
+            });
+
+          const headerRelationshipId = docxDocumentInstance.createDocumentRelationships(
+            docxDocumentInstance.relationshipFilename,
+            'header',
+            headerFileName,
+            'Internal'
+          );
+
+          // Store header
+          // eslint-disable-next-line no-param-reassign
+          docxDocumentInstance.headerObjects[uniqueHeaderTypeName] = {
+            headerId: headerResult.headerId,
+            relationshipId: headerRelationshipId,
+            height: headerResult.headerHeight || 0,
+          };
+        }
+
+        // Update headerType to use the unique key
+        headerType = uniqueHeaderTypeName;
+      } else {
+        // Generate header WITHOUT background - create explicit no-background header
+        const noBackgroundHeaderResult = await docxDocumentInstance.generateSectionHeader(
           {
             headerType,
-            backgroundUrl: backgroundUrl.replaceAll('&amp;', '&'),
-            backgroundSize,
-            backgroundPosition,
-            backgroundRepeat,
+            // Explicitly no background properties
+            backgroundUrl: null,
+            backgroundSize: null,
+            backgroundPosition: null,
+            backgroundRepeat: null,
           },
           null,
           null
         );
 
-        // Create header file and relationship
-        const headerFileName = `header${sectionHeaderResult.headerId}.xml`;
+        // Create header file and relationship for no-background header
+        const headerFileName = `header${noBackgroundHeaderResult.headerId}.xml`;
         docxDocumentInstance.zip
           .folder('word')
-          .file(headerFileName, sectionHeaderResult.headerXML.toString({ prettyPrint: true }), {
-            createFolders: false,
-          });
+          .file(
+            headerFileName,
+            noBackgroundHeaderResult.headerXML.toString({ prettyPrint: true }),
+            {
+              createFolders: false,
+            }
+          );
 
         const headerRelationshipId = docxDocumentInstance.createDocumentRelationships(
           docxDocumentInstance.relationshipFilename,
@@ -426,18 +505,18 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
           'Internal'
         );
 
-        // Store header (use unique key for background headers)
-        const uniqueHeaderKey = backgroundUrl ? `${headerType}_bg` : headerType;
+        // Store header with explicit no-background key
+        const noBackgroundHeaderKey = `${headerType}_no_bg`;
         // eslint-disable-next-line no-param-reassign
-        docxDocumentInstance.headerObjects[uniqueHeaderKey] = {
-          headerId: sectionHeaderResult.headerId,
+        docxDocumentInstance.headerObjects[noBackgroundHeaderKey] = {
+          headerId: noBackgroundHeaderResult.headerId,
           relationshipId: headerRelationshipId,
-          height: sectionHeaderResult.headerHeight || 0,
-          variantName: sectionHeaderResult.variantName,
+          height: noBackgroundHeaderResult.headerHeight || 0,
+          variantName: noBackgroundHeaderResult.variantName,
         };
 
-        // Update headerType to use the unique key
-        headerType = uniqueHeaderKey;
+        // Update headerType to use the no-background key
+        headerType = noBackgroundHeaderKey;
       }
 
       // Create a section break with its own properties (SAME STRUCTURE AS BEFORE)
@@ -470,7 +549,6 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
         footerHeight = docxDocumentInstance.footerObjects[footerType].height ?? footerHeight;
       }
 
-      // Handle margins (same as before)
       const hasCustomMargins = vNode.properties.attributes['data-margins'];
       let margins = null;
 
@@ -478,17 +556,19 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
         try {
           const marginStr = vNode.properties.attributes['data-margins'].replaceAll('&quot;', '"');
           margins = JSON.parse(marginStr);
+
+          const finalTopMargin = Math.round(
+            (margins.top ?? docxDocumentInstance.margins.top) + headerHeight
+          );
+          const finalBottomMargin = Math.round(
+            (margins.bottom ?? docxDocumentInstance.margins.bottom) + footerHeight
+          );
+
           sectionBreakPara
             .ele('w:pgMar')
-            .att(
-              'w:top',
-              Math.round((margins.top ?? docxDocumentInstance.margins.top) + headerHeight)
-            )
+            .att('w:top', finalTopMargin)
             .att('w:right', Math.round(margins.right ?? docxDocumentInstance.margins.right))
-            .att(
-              'w:bottom',
-              Math.round((margins.bottom ?? docxDocumentInstance.margins.bottom) + footerHeight)
-            )
+            .att('w:bottom', finalBottomMargin)
             .att('w:left', Math.round(margins.left ?? docxDocumentInstance.margins.left))
             .att('w:header', Math.round(docxDocumentInstance.margins.header))
             .att('w:footer', Math.round(docxDocumentInstance.margins.footer))
@@ -496,11 +576,14 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
         } catch (e) {
           console.error('Error parsing margins JSON:', e);
           // Use default page margins if parsing fails
+          const finalTopMargin = Math.round(docxDocumentInstance.margins.top + headerHeight);
+          const finalBottomMargin = Math.round(docxDocumentInstance.margins.bottom + footerHeight);
+
           sectionBreakPara
             .ele('w:pgMar')
-            .att('w:top', Math.round(docxDocumentInstance.margins.top + headerHeight))
+            .att('w:top', finalTopMargin)
             .att('w:right', Math.round(docxDocumentInstance.margins.right))
-            .att('w:bottom', Math.round(docxDocumentInstance.margins.bottom + footerHeight))
+            .att('w:bottom', finalBottomMargin)
             .att('w:left', Math.round(docxDocumentInstance.margins.left))
             .att('w:header', Math.round(docxDocumentInstance.margins.header))
             .att('w:footer', Math.round(docxDocumentInstance.margins.footer))
@@ -508,11 +591,13 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
         }
       } else {
         // Use default page margins if no custom margins are provided
+        const finalTopMargin = Math.round(docxDocumentInstance.margins.top + headerHeight);
+        const finalBottomMargin = Math.round(docxDocumentInstance.margins.bottom + footerHeight);
         sectionBreakPara
           .ele('w:pgMar')
-          .att('w:top', Math.round(docxDocumentInstance.margins.top + headerHeight))
+          .att('w:top', finalTopMargin)
           .att('w:right', Math.round(docxDocumentInstance.margins.right))
-          .att('w:bottom', Math.round(docxDocumentInstance.margins.bottom + footerHeight))
+          .att('w:bottom', finalBottomMargin)
           .att('w:left', Math.round(docxDocumentInstance.margins.left))
           .att('w:header', Math.round(docxDocumentInstance.margins.header))
           .att('w:footer', Math.round(docxDocumentInstance.margins.footer))
