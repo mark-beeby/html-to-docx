@@ -109,10 +109,10 @@ const normalizeDocumentOptions = (documentOptions) => {
 function generateEmptyHeaderAndFooter(docxDocument, zip) {
   // generate an empty header and footer xml in case these require suppression
   // eslint-disable-next-line no-param-reassign
-  docxDocument.relationshipFilename = headerFileName;
+  docxDocument.relationshipFilename = headerFileName + (docxDocument.lastHeaderId + 1);
   const { headerId, headerXML } = docxDocument.generateEmptyHeaderXML();
   // eslint-disable-next-line no-param-reassign
-  docxDocument.relationshipFilename = footerFileName;
+  docxDocument.relationshipFilename = footerFileName + (docxDocument.lastFooterId + 1);
   const { footerId, footerXML } = docxDocument.generateEmptyFooterXML();
   // eslint-disable-next-line no-param-reassign
   docxDocument.relationshipFilename = documentFileName;
@@ -199,7 +199,7 @@ async function addFilesToContainer(
     docxDocument.defaultHeaderVTree = vTree;
     docxDocument.defaultHeaderConfig = headerConfig;
 
-    docxDocument.relationshipFilename = headerFileName;
+    docxDocument.relationshipFilename = headerFileName + (docxDocument.lastHeaderId + 1);
     const { headerId, headerXML, headerHeight } = await docxDocument.generateHeaderXML(
       vTree,
       headerConfig,
@@ -235,7 +235,7 @@ async function addFilesToContainer(
   // Handle footer in similar way
   if (docxDocument.footer && (footerHTMLString || footerConfig)) {
     const vTree = footerHTMLString ? convertHTML(footerHTMLString) : null;
-    docxDocument.relationshipFilename = footerFileName;
+    docxDocument.relationshipFilename = footerFileName + (docxDocument.lastFooterId + 1);
     const { footerId, footerXML, footerHeight } = await docxDocument.generateFooterXML(
       vTree,
       footerConfig

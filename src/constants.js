@@ -69,8 +69,8 @@ const defaultDocumentOptions = {
 };
 const defaultHTMLString = '<p></p>';
 const relsFolderName = '_rels';
-const headerFileName = 'header1';
-const footerFileName = 'footer1';
+const headerFileName = 'header';
+const footerFileName = 'footer';
 const themeFileName = 'theme1';
 const documentFileName = 'document';
 const headerType = 'header';

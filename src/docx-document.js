@@ -802,13 +802,13 @@ class DocxDocument {
 
     // Store header object by type name for sectPr references
     this.headerObjects[headerTypeName] = {
-      headerId: `rId${headerId}`,
+      headerId,
       height: 0,
     };
 
     // Return all the header information including type name
     return {
-      headerId: `rId${headerId}`,
+      headerId,
       headerXML: XMLFragment,
       headerHeight: 0,
       typeName: headerTypeName,
@@ -847,7 +847,7 @@ class DocxDocument {
 
     // Return all the footer information including type name
     return {
-      footerId: `rId${footerId}`,
+      footerId,
       footerXML: XMLFragment,
       footerHeight: 0,
       typeName: footerTypeName,
