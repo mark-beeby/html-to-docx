@@ -835,6 +835,12 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
   if (isVNode(vNode) && vNode.tagName === 'span') {
     // eslint-disable-next-line no-use-before-define
     return buildRunOrRuns(vNode, attributes, docxDocumentInstance);
+  } else if (isVNode(vNode) && vNode.tagName === 'br') {
+    // Create a line break within the current run
+    const lineBreakFragment = buildLineBreak('textWrapping');
+    runFragment.import(lineBreakFragment);
+    runFragment.up();
+    return runFragment;
   }
 
   if (
@@ -876,26 +882,6 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
         tempAttributes = cloneDeep(attributes);
         tempRunFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'r');
       } else if (isVNode(tempVNode)) {
-        if (tempVNode.tagName === 'br') {
-          const lineBreakFragment = buildLineBreak('textWrapping');
-          tempRunFragment.import(lineBreakFragment);
-          runFragmentsArray.push(tempRunFragment);
-
-          // re initialize temp run fragments with new fragment
-          tempAttributes = cloneDeep(attributes);
-          tempRunFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'r');
-
-          // If the next node is a text node, trim its leading whitespace
-          if (vNodes.length > 0 && isVText(vNodes[0])) {
-            vNodes[0].text = vNodes[0].text.replace(/^\s+/, '');
-            // If the text is now empty, skip it
-            if (!vNodes[0].text) {
-              vNodes.shift();
-            }
-          }
-          // eslint-disable-next-line no-continue
-          continue;
-        }
         if (
           [
             'strong',
@@ -1022,9 +1008,6 @@ const buildRun = async (vNode, attributes, docxDocumentInstance) => {
       docxDocumentInstance
     );
     runFragment.import(imageFragment);
-  } else if (isVNode(vNode) && vNode.tagName === 'br') {
-    const lineBreakFragment = buildLineBreak('textWrapping');
-    runFragment.import(lineBreakFragment);
   }
   runFragment.up();
 
@@ -1232,7 +1215,7 @@ const buildParagraphProperties = (attributes) => {
       // Handle line spacing (already in twentieths of a point)
       if (attributes.spacing.lineSpacing !== undefined) {
         spacingFragment.att('@w', 'line', attributes.spacing.lineSpacing);
-        spacingFragment.att('@w', 'lineRule', 'atLeast');
+        spacingFragment.att('@w', 'lineRule', attributes.spacing.lineRule || 'atLeast');
       }
       // Handle paragraph spacing (already in twentieths of a point)
       if (attributes.spacing.paragraphSpacing) {
@@ -1253,7 +1236,7 @@ const buildParagraphProperties = (attributes) => {
       const halfSpace = Math.floor(extraSpace / 2);
 
       spacingFragment.att('@w', 'line', lineHeight);
-      spacingFragment.att('@w', 'lineRule', 'atLeast');
+      spacingFragment.att('@w', 'lineRule', attributes.spacing.lineRule || 'atLeast');
 
       if (extraSpace > 0) {
         spacingFragment.att('@w', 'before', halfSpace);
@@ -1432,6 +1415,24 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
     return null;
   }
 
+  // Handle null vNode for empty paragraphs (this is what we need)
+  if (!vNode && !attributes.isSpacerParagraph) {
+    // Create a minimal empty paragraph
+    const emptyParagraphFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'p');
+
+    // Apply default spacing from docxDocumentInstance if available
+    const emptyAttributes = { ...attributes };
+    if (docxDocumentInstance?.defaultSpacing) {
+      emptyAttributes.spacing = docxDocumentInstance.defaultSpacing;
+    }
+
+    const paragraphPropertiesFragment = buildParagraphProperties(emptyAttributes);
+    emptyParagraphFragment.import(paragraphPropertiesFragment);
+    emptyParagraphFragment.up();
+
+    return emptyParagraphFragment;
+  }
+
   // Skip empty nodes without attributes, unless it's a spacer paragraph
   if (!vNode && !attributes.isSpacerParagraph && !attributes) {
     return null;
@@ -1439,6 +1440,9 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
 
   // Initialize attributes object if undefined
   attributes = attributes || {};
+
+  const vNodeAttributes = vNode.properties?.attributes;
+  const typeHint = vNodeAttributes['data-type'];
 
   // For empty paragraphs, ensure no spacing is added
   const isEmpty = !vNode || (isVText(vNode) && !vNode.text.trim());
@@ -1736,18 +1740,20 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
     modifiedAttributes.afterSpacing = 0;
   }
 
-  // For empty block elements, ensure we have the correct spacing
-  if (
-    (!vNode || !vNodeHasChildren(vNode)) &&
-    !attributes.paragraphStyle &&
-    !attributes.isSpacerParagraph
-  ) {
-    modifiedAttributes.lineSpacing = 0;
-    modifiedAttributes.beforeSpacing = 0;
-    modifiedAttributes.afterSpacing = 0;
+  // For empty block elements, or hr types ensure we have the correct spacing
+  const currentLineSpacing = modifiedAttributes.spacing.lineSpacing;
+
+  if (typeHint === 'hr') {
+    modifiedAttributes.spacing.lineRule = 'exact';
+    modifiedAttributes.spacing.lineSpacing = 20;
+    modifiedAttributes.spacing.paragraphSpacing.above = 0;
+    modifiedAttributes.spacing.paragraphSpacing.below = 0;
   }
 
   const paragraphPropertiesFragment = buildParagraphProperties(modifiedAttributes);
+  modifiedAttributes.spacing.lineRule = null;
+  modifiedAttributes.spacing.lineSpacing = currentLineSpacing;
+
   paragraphFragment.import(paragraphPropertiesFragment);
 
   if (isVNode(vNode) && vNodeHasChildren(vNode)) {

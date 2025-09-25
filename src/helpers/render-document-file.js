@@ -26,6 +26,29 @@ const convertHTML = HTMLToVDOM({
   VText,
 });
 
+const isInlineContent = (child) => {
+  if (isVText(child)) return true;
+  return !!(
+    isVNode(child) &&
+    [
+      'br',
+      'strong',
+      'b',
+      'em',
+      'i',
+      'u',
+      'span',
+      'a',
+      'del',
+      's',
+      'ins',
+      'sub',
+      'sup',
+      'mark',
+    ].includes(child.tagName)
+  );
+};
+
 // eslint-disable-next-line consistent-return, no-shadow
 export const buildImage = async (docxDocumentInstance, vNode, maximumWidth = null) => {
   let response = null;
@@ -204,6 +227,138 @@ export const buildList = async (vNode, docxDocumentInstance, xmlFragment) => {
   }
 
   return xmlFragment;
+};
+
+const processChildrenInGroups = async (
+  docxDocumentInstance,
+  xmlFragment,
+  children,
+  parentVNode
+) => {
+  let currentParagraphContent = [];
+
+  const paragraphOptions = {};
+
+  // Preserve text-align from parent if it exists
+  if (
+    parentVNode &&
+    parentVNode.properties?.style?.['text-align'] &&
+    ['left', 'right', 'center', 'justify'].includes(
+      parentVNode.properties.style['text-align'].toLowerCase()
+    )
+  ) {
+    paragraphOptions.textAlign = parentVNode.properties.style['text-align'].toLowerCase();
+  }
+
+  const finishCurrentParagraph = async () => {
+    if (currentParagraphContent.length > 0) {
+      const paragraphVNode = new VNode(
+        'p',
+        parentVNode?.properties || null,
+        currentParagraphContent
+      );
+      const paragraphFragment = await xmlBuilder.buildParagraph(
+        paragraphVNode,
+        paragraphOptions,
+        docxDocumentInstance
+      );
+      xmlFragment.import(paragraphFragment);
+      currentParagraphContent = []; // Reset for next paragraph
+    }
+  };
+
+  const createEmptyParagraph = async () => {
+    const emptyParagraphFragment = await xmlBuilder.buildParagraph(
+      null,
+      {
+        ...paragraphOptions,
+        beforeSpacing: 0,
+        afterSpacing: 0,
+        lineSpacing: 240,
+      },
+      docxDocumentInstance
+    );
+    xmlFragment.import(emptyParagraphFragment);
+  };
+
+  // Helper function to clean up whitespace around br tags
+  const cleanWhitespaceAroundBr = (nodes) => {
+    // eslint-disable-next-line no-plusplus
+    for (let i = 0; i < nodes.length; i++) {
+      if (isVNode(nodes[i]) && nodes[i].tagName === 'br') {
+        // Clean whitespace before br
+        if (i > 0 && isVText(nodes[i - 1]) && !nodes[i - 1].text.trim()) {
+          nodes.splice(i - 1, 1);
+          // eslint-disable-next-line no-plusplus
+          i--; // Adjust index after removal
+        }
+
+        // Clean whitespace after br
+        if (i + 1 < nodes.length && isVText(nodes[i + 1]) && !nodes[i + 1].text.trim()) {
+          nodes.splice(i + 1, 1);
+        }
+      }
+    }
+    return nodes;
+  };
+
+  // Clean up whitespace around br tags first
+  const cleanedChildren = cleanWhitespaceAroundBr([...children]);
+
+  // eslint-disable-next-line no-plusplus
+  for (let i = 0; i < cleanedChildren.length; i++) {
+    const child = cleanedChildren[i];
+
+    if (isVNode(child) && child.tagName === 'br') {
+      // Count consecutive <br> tags starting from current position
+      let consecutiveBrCount = 1; // Current <br> counts as 1
+      let j = i + 1;
+
+      // Look ahead and count consecutive <br> tags (no need to check for whitespace since we cleaned it)
+      while (
+        j < cleanedChildren.length &&
+        isVNode(cleanedChildren[j]) &&
+        cleanedChildren[j].tagName === 'br'
+      ) {
+        // eslint-disable-next-line no-plusplus
+        consecutiveBrCount++;
+        // eslint-disable-next-line no-plusplus
+        j++;
+      }
+
+      if (consecutiveBrCount >= 2) {
+        // Multiple consecutive <br> tags - create paragraph breaks
+        await finishCurrentParagraph();
+
+        // Create empty paragraphs (one less than the number of <br> tags)
+        // eslint-disable-next-line no-plusplus
+        for (let k = 0; k < consecutiveBrCount; k++) {
+          await createEmptyParagraph();
+        }
+
+        // Skip all the processed <br> tags
+        i = j - 1; // -1 because the loop will increment i
+      } else {
+        // Single <br> - add to current paragraph content for inline line break
+        currentParagraphContent.push(child);
+      }
+    } else if (isInlineContent(child)) {
+      // Skip whitespace-only text nodes between elements
+      if (isVText(child) && !child.text.trim()) {
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+      currentParagraphContent.push(child);
+    } else {
+      // Block element
+      await finishCurrentParagraph();
+      // eslint-disable-next-line no-use-before-define
+      await findXMLEquivalent(docxDocumentInstance, child, xmlFragment);
+    }
+  }
+
+  // Handle any remaining content
+  await finishCurrentParagraph();
 };
 
 export async function convertVTreeToXML(docxDocumentInstance, vTree, xmlFragment) {
@@ -745,12 +900,10 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
             await findXMLEquivalent(docxDocumentInstance, child, xmlFragment);
           }
         }
-      } else {
-        // No direct text, just process div's children normally
-        // eslint-disable-next-line no-restricted-syntax
-        for (const child of vNode.children || []) {
-          await findXMLEquivalent(docxDocumentInstance, child, xmlFragment);
-        }
+      }
+
+      if (vNodeHasChildren(vNode)) {
+        await processChildrenInGroups(docxDocumentInstance, xmlFragment, vNode.children, vNode);
       }
 
       // Check for data-spacing-after attribute
@@ -831,36 +984,10 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     case 'pre':
       // Check if this inline element has display: block style
       const hasDisplayBlock = vNode.properties?.style?.display === 'block';
-      // If it has display: block, handle it as a block element
-      // and pass its text-align property to the paragraph builder if present
+
       if (hasDisplayBlock) {
-        const paragraphOptions = {};
-
-        // Preserve text-align for the paragraph if it exists
-        if (
-          vNode.properties?.style?.['text-align'] &&
-          ['left', 'right', 'center', 'justify'].includes(
-            vNode.properties.style['text-align'].toLowerCase()
-          )
-        ) {
-          paragraphOptions.textAlign = vNode.properties.style['text-align'].toLowerCase();
-        }
-
-        const nParagraphFragment = await xmlBuilder.buildParagraph(
-          vNode,
-          paragraphOptions,
-          docxDocumentInstance
-        );
-        xmlFragment.import(nParagraphFragment);
-
-        // Add empty paragraph after block elements with mb-6 class
-        if (vNode.properties?.attributes?.class?.includes('mb-6')) {
-          const spacerParagraph = await xmlBuilder.buildParagraph(
-            null,
-            { isSpacerParagraph: true },
-            docxDocumentInstance
-          );
-          xmlFragment.import(spacerParagraph);
+        if (vNodeHasChildren(vNode)) {
+          await processChildrenInGroups(docxDocumentInstance, xmlFragment, vNode.children, vNode);
         }
         return;
       }

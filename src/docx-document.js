@@ -1210,20 +1210,6 @@ class DocxDocument {
 
     let headerHeight = null;
 
-    // Add page background if present in headerConfig
-    if (headerConfig && headerConfig.pageBackground && headerConfig.pageBackground.url) {
-      await this.addBackgroundToHeader(
-        headerXML,
-        {
-          backgroundUrl: headerConfig.pageBackground.url,
-          backgroundSize: headerConfig.pageBackground.size,
-          backgroundPosition: headerConfig.pageBackground.position,
-          backgroundRepeat: headerConfig.pageBackground.repeat,
-        },
-        headerId
-      );
-    }
-
     // Process vTree content
     if (vTree) {
       const XMLFragment = fragment();
@@ -1266,6 +1252,20 @@ class DocxDocument {
           this.logoHeights.push(Math.ceil(logoHeight / 635));
         }
       }
+    }
+
+    // Add page background if present in headerConfig
+    if (headerConfig && headerConfig.pageBackground && headerConfig.pageBackground.url) {
+      await this.addBackgroundToHeader(
+        headerXML,
+        {
+          backgroundUrl: headerConfig.pageBackground.url,
+          backgroundSize: headerConfig.pageBackground.size,
+          backgroundPosition: headerConfig.pageBackground.position,
+          backgroundRepeat: headerConfig.pageBackground.repeat,
+        },
+        headerId
+      );
     }
 
     // Calculate final height
@@ -1450,7 +1450,7 @@ class DocxDocument {
       .ele('@w', 'r')
       .ele('@w', 'drawing')
       .ele('@wp', 'anchor')
-      .att('behindDoc', '1')
+      .att('behindDoc', type === 'footer' ? '0' : '1')
       .att('distT', '0')
       .att('distB', '0')
       .att('distL', '0')
