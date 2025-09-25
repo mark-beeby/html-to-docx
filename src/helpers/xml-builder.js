@@ -1415,7 +1415,7 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
     return null;
   }
 
-  // Handle null vNode for empty paragraphs (this is what we need)
+  // Handle null vNode for empty paragraphs (this is what we need for intentional empty paragraphs)
   if (!vNode && !attributes.isSpacerParagraph) {
     // Create a minimal empty paragraph
     const emptyParagraphFragment = fragment({ namespaceAlias: { w: namespaces.w } }).ele('@w', 'p');
@@ -1735,7 +1735,7 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
 
   // For spacer paragraphs, ensure we have minimal spacing
   if (attributes.isSpacerParagraph) {
-    modifiedAttributes.lineSpacing = 240; // Standard line spacing
+    modifiedAttributes.lineSpacing = 140; // Standard line spacing
     modifiedAttributes.beforeSpacing = 0;
     modifiedAttributes.afterSpacing = 0;
   }

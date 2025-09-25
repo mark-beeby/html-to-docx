@@ -229,6 +229,26 @@ export const buildList = async (vNode, docxDocumentInstance, xmlFragment) => {
   return xmlFragment;
 };
 
+// Helper function to clean up whitespace around br tags
+const cleanWhitespaceAroundBr = (nodes) => {
+  // eslint-disable-next-line no-plusplus
+  for (let i = 0; i < nodes.length; i++) {
+    if (isVNode(nodes[i]) && nodes[i].tagName === 'br') {
+      // Clean whitespace before br
+      if (i > 0 && isVText(nodes[i - 1]) && !nodes[i - 1].text.trim()) {
+        nodes.splice(i - 1, 1);
+        // eslint-disable-next-line no-plusplus
+        i--; // Adjust index after removal
+      }
+
+      // Clean whitespace after br
+      if (i + 1 < nodes.length && isVText(nodes[i + 1]) && !nodes[i + 1].text.trim()) {
+        nodes.splice(i + 1, 1);
+      }
+    }
+  }
+  return nodes;
+};
 const processChildrenInGroups = async (
   docxDocumentInstance,
   xmlFragment,
@@ -239,7 +259,6 @@ const processChildrenInGroups = async (
 
   const paragraphOptions = {};
 
-  // Preserve text-align from parent if it exists
   if (
     parentVNode &&
     parentVNode.properties?.style?.['text-align'] &&
@@ -263,46 +282,19 @@ const processChildrenInGroups = async (
         docxDocumentInstance
       );
       xmlFragment.import(paragraphFragment);
-      currentParagraphContent = []; // Reset for next paragraph
+      currentParagraphContent = [];
     }
   };
 
   const createEmptyParagraph = async () => {
     const emptyParagraphFragment = await xmlBuilder.buildParagraph(
       null,
-      {
-        ...paragraphOptions,
-        beforeSpacing: 0,
-        afterSpacing: 0,
-        lineSpacing: 240,
-      },
+      { ...paragraphOptions, beforeSpacing: 0, afterSpacing: 0, lineSpacing: 240 },
       docxDocumentInstance
     );
     xmlFragment.import(emptyParagraphFragment);
   };
 
-  // Helper function to clean up whitespace around br tags
-  const cleanWhitespaceAroundBr = (nodes) => {
-    // eslint-disable-next-line no-plusplus
-    for (let i = 0; i < nodes.length; i++) {
-      if (isVNode(nodes[i]) && nodes[i].tagName === 'br') {
-        // Clean whitespace before br
-        if (i > 0 && isVText(nodes[i - 1]) && !nodes[i - 1].text.trim()) {
-          nodes.splice(i - 1, 1);
-          // eslint-disable-next-line no-plusplus
-          i--; // Adjust index after removal
-        }
-
-        // Clean whitespace after br
-        if (i + 1 < nodes.length && isVText(nodes[i + 1]) && !nodes[i + 1].text.trim()) {
-          nodes.splice(i + 1, 1);
-        }
-      }
-    }
-    return nodes;
-  };
-
-  // Clean up whitespace around br tags first
   const cleanedChildren = cleanWhitespaceAroundBr([...children]);
 
   // eslint-disable-next-line no-plusplus
@@ -311,10 +303,9 @@ const processChildrenInGroups = async (
 
     if (isVNode(child) && child.tagName === 'br') {
       // Count consecutive <br> tags starting from current position
-      let consecutiveBrCount = 1; // Current <br> counts as 1
+      let consecutiveBrCount = 1;
       let j = i + 1;
 
-      // Look ahead and count consecutive <br> tags (no need to check for whitespace since we cleaned it)
       while (
         j < cleanedChildren.length &&
         isVNode(cleanedChildren[j]) &&
@@ -327,40 +318,75 @@ const processChildrenInGroups = async (
       }
 
       if (consecutiveBrCount >= 2) {
-        // Multiple consecutive <br> tags - create paragraph breaks
         await finishCurrentParagraph();
 
-        // Create empty paragraphs (one less than the number of <br> tags)
+        const emptyLinesToCreate = Math.ceil(consecutiveBrCount / 2);
+
         // eslint-disable-next-line no-plusplus
-        for (let k = 0; k < consecutiveBrCount; k++) {
+        for (let k = 0; k < emptyLinesToCreate; k++) {
           await createEmptyParagraph();
         }
 
-        // Skip all the processed <br> tags
-        i = j - 1; // -1 because the loop will increment i
+        i = j - 1;
+      } else if (currentParagraphContent.length > 0) {
+        // Single <br> tag
+        // Content exists - check if there's content after this <br>
+        let hasContentAfter = false;
+        // eslint-disable-next-line no-plusplus
+        for (let k = i + 1; k < cleanedChildren.length; k++) {
+          if (
+            isInlineContent(cleanedChildren[k]) &&
+            !(isVText(cleanedChildren[k]) && !cleanedChildren[k].text.trim())
+          ) {
+            hasContentAfter = true;
+            break;
+          } else if (!isInlineContent(cleanedChildren[k])) {
+            break;
+          }
+        }
+
+        if (hasContentAfter) {
+          // Single <br> with content after: add as line break within paragraph
+          currentParagraphContent.push(child);
+        } else {
+          // Single <br> at end: finish paragraph (br just ends the line)
+          await finishCurrentParagraph();
+        }
       } else {
-        // Single <br> - add to current paragraph content for inline line break
-        currentParagraphContent.push(child);
+        // Standalone <br>: check if there's content after
+        let hasContentAfter = false;
+        // eslint-disable-next-line no-plusplus
+        for (let k = i + 1; k < cleanedChildren.length; k++) {
+          if (
+            isInlineContent(cleanedChildren[k]) &&
+            !(isVText(cleanedChildren[k]) && !cleanedChildren[k].text.trim())
+          ) {
+            hasContentAfter = true;
+            break;
+          } else if (!isInlineContent(cleanedChildren[k])) {
+            break;
+          }
+        }
+
+        if (hasContentAfter) {
+          await createEmptyParagraph();
+        }
       }
     } else if (isInlineContent(child)) {
-      // Skip whitespace-only text nodes between elements
       if (isVText(child) && !child.text.trim()) {
         // eslint-disable-next-line no-continue
         continue;
       }
       currentParagraphContent.push(child);
     } else {
-      // Block element
       await finishCurrentParagraph();
       // eslint-disable-next-line no-use-before-define
       await findXMLEquivalent(docxDocumentInstance, child, xmlFragment);
     }
   }
 
-  // Handle any remaining content
   await finishCurrentParagraph();
 };
-
 export async function convertVTreeToXML(docxDocumentInstance, vTree, xmlFragment) {
   if (!vTree) {
     return xmlFragment;
@@ -913,9 +939,9 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
           .ele('@w', 'pPr')
           .ele('@w', 'spacing')
           .att('@w', 'after', spacingAfter)
-          .att('@w', 'before', '0')
-          .att('@w', 'line', '240')
-          .att('@w', 'lineRule', 'auto')
+          .att('@w', 'before', spacingAfter)
+          .att('@w', 'line', spacingAfter)
+          .att('@w', 'lineRule', 'exactly')
           .up()
           .up()
           .up();
@@ -936,9 +962,9 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
           .ele('@w', 'pPr')
           .ele('@w', 'spacing')
           .att('@w', 'after', spacingAfter)
-          .att('@w', 'before', '0')
-          .att('@w', 'line', '240')
-          .att('@w', 'lineRule', 'auto')
+          .att('@w', 'before', spacingAfter)
+          .att('@w', 'line', spacingAfter)
+          .att('@w', 'lineRule', 'exactly')
           .up()
           .up()
           .up();
