@@ -1450,7 +1450,7 @@ const buildParagraph = async (vNode, attributes, docxDocumentInstance) => {
   attributes = attributes || {};
 
   const vNodeAttributes = vNode.properties?.attributes;
-  const typeHint = vNodeAttributes['data-type'];
+  const typeHint = vNodeAttributes ? vNodeAttributes['data-type'] : null;
 
   // For empty paragraphs, ensure no spacing is added
   const isEmpty = !vNode || (isVText(vNode) && !vNode.text.trim());
