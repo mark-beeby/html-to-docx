@@ -1169,12 +1169,6 @@ const buildHorizontalAlignment = (horizontalAlignment) => {
   return fragment({ namespaceAlias: { w: namespaces.w } })
     .ele('@w', 'jc')
     .att('@w', 'val', horizontalAlignment)
-    .up()
-    .ele('@w', 'spacing')
-    .att('@w', 'line', '0')
-    .att('@w', 'lineRule', 'auto')
-    .att('@w', 'before', '0')
-    .att('@w', 'after', '0')
     .up();
 };
 
@@ -2129,6 +2123,78 @@ const parseGradient = (backgroundValue) => {
   };
 };
 
+// Helper function to recursively check for text content
+const hasTextContent = (vNode) => {
+  if (isVText(vNode)) {
+    return vNode.text.trim() !== '';
+  }
+
+  if (isVNode(vNode) && vNode.children) {
+    return vNode.children.some((child) => hasTextContent(child));
+  }
+
+  return false;
+};
+
+// Helper function to check if a table row is effectively empty
+const isTableRowEmpty = (rowVNode) => {
+  if (!rowVNode || !rowVNode.children) return true;
+
+  const cells = rowVNode.children.filter(
+    (child) => child.tagName === 'td' || child.tagName === 'th'
+  );
+
+  // If no cells, it's empty
+  if (cells.length === 0) return true;
+
+  // Check if all cells are empty
+  return cells.every((cell) => {
+    if (!cell.children || cell.children.length === 0) return true;
+
+    // Check if cell contains only whitespace and/or HTML comments
+    const hasContent = cell.children.some((child) => {
+      if (isVText(child)) {
+        return child.text.trim() !== '';
+      }
+      if (isVNode(child)) {
+        // Recursively check if the child has any meaningful content
+        return hasTextContent(child);
+      }
+      return false;
+    });
+
+    return !hasContent;
+  });
+};
+
+// Check if the column (cell) has meaningful content before processing
+const hasMeaningfulContent = (column) => {
+  if (!column.children || column.children.length === 0) {
+    return false;
+  }
+
+  // Recursively check for actual content
+  const checkContent = (nodes) =>
+    nodes.some((node) => {
+      if (isVText(node)) {
+        return node.text.trim() !== '';
+      }
+      if (isVNode(node)) {
+        // Check for meaningful tags
+        if (['img', 'table', 'ul', 'ol'].includes(node.tagName)) {
+          return true;
+        }
+        // For other nodes, check their children
+        if (node.children && node.children.length > 0) {
+          return checkContent(node.children);
+        }
+      }
+      return false;
+    });
+
+  return checkContent(column.children);
+};
+
 const buildTableRow = async function buildTableRow(docxDocumentInstance, columns, attributes = {}) {
   const { rowContext, rowVNode } = attributes;
   const width = attributes.width || attributes.maximumWidth || '100%';
@@ -2426,8 +2492,48 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
 
     tableCellFragment.up();
 
-    // Import cell content
-    await convertVTreeToXML(docxDocumentInstance, column.children, tableCellFragment);
+    if (hasMeaningfulContent(column)) {
+      // Import cell content
+      await convertVTreeToXML(docxDocumentInstance, column.children, tableCellFragment);
+    } else {
+      // Add just one minimal empty paragraph for empty cells
+      const emptyParagraph = fragment({ namespaceAlias: { w: namespaces.w } })
+        .ele('@w', 'p')
+        .ele('@w', 'pPr')
+        .ele('@w', 'spacing')
+        .att('@w', 'line', '240')
+        .att('@w', 'lineRule', 'atLeast')
+        .att('@w', 'before', '0')
+        .att('@w', 'after', '0')
+        .up()
+        .up()
+        .up();
+      tableCellFragment.import(emptyParagraph);
+    }
+
+    // Remove empty paragraphs from the cell
+    const paragraphs = tableCellFragment.node.getElementsByTagName('w:p');
+    for (let i = paragraphs.length - 1; i >= 0; i--) {
+      const paragraph = paragraphs[i];
+
+      // Check if paragraph is empty (no runs or only empty runs)
+      const runs = paragraph.getElementsByTagName('w:r');
+      const hasContent = Array.from(runs).some((run) => {
+        const texts = run.getElementsByTagName('w:t');
+        return Array.from(texts).some((text) => text.textContent && text.textContent.trim());
+      });
+
+      // Also check for line breaks or other content
+      const hasBreaks = paragraph.getElementsByTagName('w:br').length > 0;
+      const hasOtherContent =
+        paragraph.getElementsByTagName('w:drawing').length > 0 ||
+        paragraph.getElementsByTagName('w:tab').length > 0;
+
+      // If paragraph has no content, remove it
+      if (!hasContent && !hasBreaks && !hasOtherContent) {
+        paragraph.parentNode.removeChild(paragraph);
+      }
+    }
 
     // Handle nested tables recursively
     // eslint-disable-next-line no-restricted-syntax
@@ -2910,14 +3016,14 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
       if (child.tagName === 'tr') {
         // Only count rows with at least one cell
         const hasCells = child.children.some((c) => c.tagName === 'td' || c.tagName === 'th');
-        if (hasCells) totalRows++;
+        if (hasCells && !isTableRowEmpty(child)) totalRows++;
       } else if (child.tagName === 'thead' || child.tagName === 'tbody') {
         child.children
           .filter((grandChild) => grandChild.tagName === 'tr')
           .forEach((row) => {
             // Only count rows with at least one cell
             const hasCells = row.children.some((c) => c.tagName === 'td' || c.tagName === 'th');
-            if (hasCells) totalRows++;
+            if (hasCells && !isTableRowEmpty(row)) totalRows++;
           });
       }
     });
@@ -2936,6 +3042,12 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
         for (let iteratorIndex = 0; iteratorIndex < childVNode.children.length; iteratorIndex++) {
           const grandChildVNode = childVNode.children[iteratorIndex];
           if (grandChildVNode.tagName === 'tr') {
+            // Skip empty rows
+            if (isTableRowEmpty(grandChildVNode)) {
+              // eslint-disable-next-line no-continue
+              continue;
+            }
+
             const columns = grandChildVNode.children.filter(
               (child) => child.tagName === 'td' || child.tagName === 'th'
             );
@@ -2977,6 +3089,12 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
         for (let iteratorIndex = 0; iteratorIndex < childVNode.children.length; iteratorIndex++) {
           const grandChildVNode = childVNode.children[iteratorIndex];
           if (grandChildVNode.tagName === 'tr') {
+            // Skip empty rows
+            if (isTableRowEmpty(grandChildVNode)) {
+              // eslint-disable-next-line no-continue
+              continue;
+            }
+
             const columns = grandChildVNode.children.filter(
               (child) => child.tagName === 'td' || child.tagName === 'th'
             );
@@ -3013,6 +3131,12 @@ const buildTable = async (vNode, attributes, docxDocumentInstance) => {
           }
         }
       } else if (childVNode.tagName === 'tr') {
+        // Skip empty rows
+        if (isTableRowEmpty(childVNode)) {
+          // eslint-disable-next-line no-continue
+          continue;
+        }
+
         const columns = childVNode.children.filter(
           (child) => child.tagName === 'td' || child.tagName === 'th'
         );
