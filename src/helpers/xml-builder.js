@@ -2258,7 +2258,7 @@ const buildTableRow = async function buildTableRow(docxDocumentInstance, columns
   if (needsRowHeight) {
     trPr
       .ele('@w', 'trHeight')
-      .att('@w', 'val', maxCellHeight.toString() > 0 ? maxCellHeight.toString() : '400') // Set a default height of 400 twips (about 0.28 inches)
+      .att('@w', 'val', maxCellHeight.toString() > 0 ? maxCellHeight.toString() : '240') // Set a default height of 400 twips (about 0.28 inches)
       .att('@w', 'hRule', 'atLeast'); // atLeast ensures minimum height while allowing expansion if needed
   } else if (maxCellHeight) {
     trPr
