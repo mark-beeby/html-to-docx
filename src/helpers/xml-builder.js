@@ -27,6 +27,8 @@ import {
 import {
   percentageRegex,
   pixelRegex,
+  remRegex,
+  emRegex,
   pixelToEMU,
   pixelToHIP,
   pixelToTWIP,
@@ -466,7 +468,19 @@ const fixupMargin = (marginString) => {
     const matchedParts = marginString.match(pixelRegex);
     // convert pixels to half point
     return pixelToTWIP(matchedParts[1]);
+  } else if (emRegex.test(marginString)) {
+    const matchedParts = marginString.match(emRegex);
+    // Convert em to pixels first (assuming 1em = 14px default)
+    const pixels = parseFloat(matchedParts[1]) * 14;
+    return pixelToTWIP(pixels);
+  } else if (remRegex.test(marginString)) {
+    const matchedParts = marginString.match(remRegex);
+    // Convert rem to pixels (assuming 1rem = 14px default)
+    const pixels = parseFloat(matchedParts[1]) * 14;
+    return pixelToTWIP(pixels);
   }
+
+  return undefined;
 };
 
 const parseBorderStyle = (borderStyle) => {
@@ -3566,4 +3580,5 @@ export {
   buildUnderline,
   buildDrawing,
   fixupLineHeight,
+  modifiedStyleAttributesBuilder,
 };

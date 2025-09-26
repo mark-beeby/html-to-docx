@@ -3,6 +3,8 @@ export const percentageRegex = /([\d.]+)%/i;
 export const pointRegex = /([\d.]+)pt/i;
 export const cmRegex = /([\d.]+)cm/i;
 export const inchRegex = /([\d.]+)in/i;
+export const emRegex = /^([0-9]*\.?[0-9]+)em$/;
+export const remRegex = /^([0-9]*\.?[0-9]+)rem$/;
 
 export const pixelToEMU = (pixelValue) => Math.round(pixelValue * 9525);
 

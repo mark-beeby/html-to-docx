@@ -15,7 +15,7 @@ import mimeTypes from 'mime-types';
 // eslint-disable-next-line import/no-cycle
 import * as xmlBuilder from './xml-builder';
 // eslint-disable-next-line import/no-cycle
-import { buildTableRow } from './xml-builder';
+import { buildTableRow, modifiedStyleAttributesBuilder } from './xml-builder';
 import namespaces from '../namespaces';
 import { imageType, internalRelationship } from '../constants';
 import { vNodeHasChildren } from '../utils/vnode';
@@ -983,14 +983,20 @@ async function findXMLEquivalent(docxDocumentInstance, vNode, xmlFragment) {
     case 'h4':
     case 'h5':
     case 'h6':
+      const headingAttributes = modifiedStyleAttributesBuilder(
+        docxDocumentInstance,
+        vNode,
+        {},
+        { isParagraph: true }
+      );
+      headingAttributes.paragraphStyle = `Heading${vNode.tagName[1]}`;
       const headingFragment = await xmlBuilder.buildParagraph(
         vNode,
-        { paragraphStyle: `Heading${vNode.tagName[1]}` },
+        headingAttributes,
         docxDocumentInstance
       );
       xmlFragment.import(headingFragment);
       return;
-
     case 'span':
     case 'strong':
     case 'b':
