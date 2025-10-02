@@ -1,6 +1,6 @@
 {
   "name": "@mark-beeby/html-to-docx",
-  "version": "1.6.4-rc.6",
+  "version": "1.6.4-rc.7",
   "description": "HTML to DOCX converter (Fork with custom modifications to support table column widths)",
   "keywords": [
     "html",
